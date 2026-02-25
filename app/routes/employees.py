@@ -151,7 +151,7 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
                     "type_contrat": contrat.type_contrat if contrat else "-",
                     "date_debut": contrat.date_debut.isoformat() if contrat and contrat.date_debut else None,
                     "date_fin": contrat.date_fin.isoformat() if contrat and contrat.date_fin else None,
-                    "validiteContrat": f"{contrat.date_debut.isoformat()} - {contrat.date_fin.isoformat() if contrat.date_fin else 'Indéterminée'}" if contrat and contrat.date_debut else "-",
+                    "validiteContrat": ("En cours" if is_active else "Expiré") if contrat else "-",
                     "qualiteContrat": contrat.categorie_poste if contrat else "-",
                     "is_active": is_active,
                     "region": region_name,
