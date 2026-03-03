@@ -17,10 +17,32 @@ def normalize_utf8(text):
     if not text or not isinstance(text, str):
         return text
     try:
-        # Essayer de décoder et réencoder en UTF-8
-        if isinstance(text, str):
-            return text.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
-        return text
+        # Dictionnaire de remplacement pour les caractères mal encodés courants
+        replacements = {
+            '├â┬®': 'é',
+            '├â┬Ç': 'ç',
+            '├â┬Ö': 'è',
+            '├â┬ê': 'ê',
+            '├ô┬ê': 'ô',
+            '├ô┬ç': 'ù',
+            '├â┬ô': 'à',
+            '├â┬ô': 'î',
+            '├â┬ü': 'ü',
+            '├â┬ö': 'ö',
+            '├â┬ô': 'á',
+            '├â┬ö': 'ó',
+            '├â┬ü': 'ú',
+            '├â┬ô': 'í',
+            'N├ó┬Ç┬Ö': 'NGUESSAN',
+            'n├ó┬Ç┬Ö': 'nguessan',
+            '├é┬á': 'é',
+        }
+        
+        result = text
+        for bad, good in replacements.items():
+            result = result.replace(bad, good)
+        
+        return result
     except:
         return text
 
@@ -59,7 +81,7 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
                 fp.nom,
                 fp.prenom,
                 fp.matricule,
-                fp.date_naissance,
+                fp.date_naissance::date,
                 fp.genre,
                 fp.contact,
                 c.id as contrat_id,
@@ -70,8 +92,8 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
                 c.diplome,
                 c.ecole,
                 c.type_contrat,
-                c.date_debut,
-                c.date_fin,
+                c.date_debut::date,
+                c.date_fin::date,
                 fpl.region_id,
                 fpl.departement_id,
                 fpl.sous_prefecture_id,
@@ -105,24 +127,46 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
             emp_id = row[0]
             
             if emp_id not in employees_dict:
+                # Convertir les dates si elles sont des strings
+                date_naissance = row[4]
+                if isinstance(date_naissance, str):
+                    try:
+                        date_naissance = date.fromisoformat(date_naissance)
+                    except:
+                        date_naissance = None
+                
+                date_debut = row[15]
+                if isinstance(date_debut, str):
+                    try:
+                        date_debut = date.fromisoformat(date_debut)
+                    except:
+                        date_debut = None
+                
+                date_fin = row[16]
+                if isinstance(date_fin, str):
+                    try:
+                        date_fin = date.fromisoformat(date_fin)
+                    except:
+                        date_fin = None
+                
                 # Calculer l'âge
                 age = 0
-                if row[4]:  # date_naissance
-                    age = today.year - row[4].year
-                    if (today.month, today.day) < (row[4].month, row[4].day):
+                if date_naissance:
+                    age = today.year - date_naissance.year
+                    if (today.month, today.day) < (date_naissance.month, date_naissance.day):
                         age -= 1
                 
                 # Déterminer si le contrat est actif
                 is_active = False
-                if row[10]:  # date_debut
-                    is_active = (row[10] <= today and (row[11] is None or row[11] >= today))
+                if date_debut:
+                    is_active = (date_debut <= today and (date_fin is None or date_fin >= today))
                 
                 employees_dict[emp_id] = {
                     "id": row[0],
                     "nom": normalize_utf8(row[1]),
                     "prenom": normalize_utf8(row[2]),
                     "matricule": normalize_utf8(row[3] or "-"),
-                    "date_naissance": row[4].isoformat() if row[4] else None,
+                    "date_naissance": date_naissance.isoformat() if date_naissance else None,
                     "genre": row[5] or "M",
                     "contact": normalize_utf8(row[6] or "-"),
                     "age": age,
@@ -134,9 +178,9 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
                     "diplome": normalize_utf8(row[12] if row[12] else "-"),
                     "ecole": normalize_utf8(row[13] if row[13] else "-"),
                     "type_contrat": normalize_utf8(row[14] if row[14] else "-"),
-                    "date_debut": row[15].isoformat() if row[15] else None,
-                    "date_fin": row[16].isoformat() if row[16] else None,
-                    "validiteContrat": ("En cours" if is_active else "Expiré") if row[10] else "-",
+                    "date_debut": date_debut.isoformat() if date_debut else None,
+                    "date_fin": date_fin.isoformat() if date_fin else None,
+                    "validiteContrat": ("En cours" if is_active else "Expiré") if date_debut else "-",
                     "qualiteContrat": normalize_utf8(row[9] if row[9] else "-"),
                     "is_active": is_active,
                     "region": normalize_utf8(row[19] if row[19] else "-"),
