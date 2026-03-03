@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_, text
-from datetime import datetime, date, timedelta
+from sqlalchemy import func, or_
+from datetime import date, timedelta
 from app.database import get_db
-from app.models import FicPersonne, Contrat, Acteur, Login, ZoneDIntervention, UserAction, FicPersonneLocalisation, Projet, FicPersonneProjet
+from app.models import FicPersonne, Contrat, Acteur, Login, ZoneDIntervention, UserAction, FicPersonneLocalisation, Projet, FicPersonneProjet, TRegion, TDepartement
 from app.security import get_current_user
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -193,26 +193,19 @@ async def get_employees_by_zone(acteur_id: str, filter_type: str = "all", db: Se
         result = []
         for region_id, dept_id, count in zones_data:
             if count > 0:
-                # Récupérer les noms de région et département
                 region_name = "N/A"
                 dept_name = "N/A"
-                
+
                 if region_id:
-                    region = db.query(db.query(db.models.TRegion).filter(
-                        db.models.TRegion.id == region_id
-                    ).first() if hasattr(db, 'models') else None)
-                    # Utiliser une requête directe
-                    from app.models import TRegion, TDepartement
                     region_obj = db.query(TRegion).filter(TRegion.id == region_id).first()
                     if region_obj:
                         region_name = region_obj.nom
-                
+
                 if dept_id:
-                    from app.models import TDepartement
                     dept_obj = db.query(TDepartement).filter(TDepartement.id == dept_id).first()
                     if dept_obj:
                         dept_name = dept_obj.nom
-                
+
                 result.append({
                     "region": region_name,
                     "departement": dept_name,
