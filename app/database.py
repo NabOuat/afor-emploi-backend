@@ -7,7 +7,9 @@ from app.models import Base
 engine = create_engine(
     settings.DATABASE_URL, 
     echo=False,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
+    connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {},
+    pool_pre_ping=True,
+    isolation_level="READ COMMITTED"
 )
 
 # Configurer UTF-8 pour PostgreSQL
