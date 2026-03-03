@@ -7,9 +7,22 @@ from app.database import get_db
 from app.models import FicPersonne, Contrat, FicPersonneLocalisation, FicPersonneProjet, Projet, TRegion, TDepartement, TSousPrefecture, ZoneDIntervention
 from typing import List, Optional
 import logging
+import unicodedata
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/employees", tags=["employees"])
+
+def normalize_utf8(text):
+    """Normalise les caractères UTF-8 mal encodés"""
+    if not text or not isinstance(text, str):
+        return text
+    try:
+        # Essayer de décoder et réencoder en UTF-8
+        if isinstance(text, str):
+            return text.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+        return text
+    except:
+        return text
 
 class EmployeeDetail:
     def __init__(self, fic_personne, contrat, localisation):
@@ -37,134 +50,113 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
     try:
         logger.info(f"Récupération des employés pour acteur_id: {acteur_id}")
         
-        # Récupérer tous les employés de l'acteur via fic_personne_projet
-        # Structure: acteur (1) -> (N) fic_personne_projet (N) <- (1) fic_personne
-        fic_personne_projets = db.query(FicPersonneProjet).filter(
-            FicPersonneProjet.acteur_id == acteur_id
-        ).all()
+        # Requête SQL optimisée pour charger tous les données en une seule requête
+        from sqlalchemy import text
         
-        # Récupérer les IDs uniques des employés
-        employee_ids = set(fpp.fic_personne_id for fpp in fic_personne_projets)
+        result = db.execute(text("""
+            SELECT DISTINCT
+                fp.id,
+                fp.nom,
+                fp.prenom,
+                fp.matricule,
+                fp.date_naissance,
+                fp.genre,
+                fp.contact,
+                c.id as contrat_id,
+                c.poste_nom,
+                c.categorie_poste,
+                c.poste,
+                c.type_personne,
+                c.diplome,
+                c.ecole,
+                c.type_contrat,
+                c.date_debut,
+                c.date_fin,
+                fpl.region_id,
+                fpl.departement_id,
+                fpl.sous_prefecture_id,
+                tr.nom as region_nom,
+                td.nom as departement_nom,
+                ts.nom as sous_prefecture_nom,
+                p.id as projet_id,
+                p.nom as projet_nom,
+                p.nom_complet as projet_nom_complet
+            FROM fic_personne fp
+            INNER JOIN fic_personne_projet fpp ON fp.id = fpp.fic_personne_id
+            LEFT JOIN contrat c ON fp.id = c.fic_personne_id
+            LEFT JOIN fic_personne_localisation fpl ON c.id = fpl.contrat_id
+            LEFT JOIN tregion tr ON fpl.region_id = tr.id
+            LEFT JOIN tdepartement td ON fpl.departement_id = td.id
+            LEFT JOIN tsousprefecture ts ON fpl.sous_prefecture_id = ts.id
+            LEFT JOIN fic_personne_projet fpp2 ON fp.id = fpp2.fic_personne_id
+            LEFT JOIN projet p ON fpp2.projet_id = p.id
+            WHERE fpp.acteur_id = :acteur_id
+            ORDER BY fp.id, c.date_debut DESC
+        """), {"acteur_id": acteur_id})
         
-        # Récupérer les employés
-        personnes = db.query(FicPersonne).filter(
-            FicPersonne.id.in_(list(employee_ids))
-        ).all() if employee_ids else []
+        rows = result.fetchall()
+        logger.info(f"Nombre de lignes retournées: {len(rows)}")
         
-        logger.info(f"Nombre d'employés trouvés: {len(personnes)}")
+        # Grouper les résultats par employé
+        employees_dict = {}
+        today = date.today()
         
-        employees = []
-        
-        for personne in personnes:
-            try:
-                # Récupérer le contrat le plus récent (le dernier créé)
-                contrat = db.query(Contrat).filter(
-                    Contrat.fic_personne_id == personne.id
-                ).order_by(Contrat.date_debut.desc()).first()
-                
-                # Récupérer la localisation associée
-                localisation = None
-                if contrat:
-                    localisation = db.query(FicPersonneLocalisation).filter(
-                        FicPersonneLocalisation.contrat_id == contrat.id
-                    ).first()
-                
+        for row in rows:
+            emp_id = row[0]
+            
+            if emp_id not in employees_dict:
                 # Calculer l'âge
                 age = 0
-                if personne.date_naissance:
-                    today = date.today()
-                    age = today.year - personne.date_naissance.year
-                    if (today.month, today.day) < (personne.date_naissance.month, personne.date_naissance.day):
+                if row[4]:  # date_naissance
+                    age = today.year - row[4].year
+                    if (today.month, today.day) < (row[4].month, row[4].day):
                         age -= 1
                 
                 # Déterminer si le contrat est actif
-                today = date.today()
                 is_active = False
-                if contrat:
-                    is_active = (contrat.date_debut <= today and 
-                               (contrat.date_fin is None or contrat.date_fin >= today))
+                if row[10]:  # date_debut
+                    is_active = (row[10] <= today and (row[11] is None or row[11] >= today))
                 
-                # Récupérer les noms de région, département, sous-préfecture
-                region_name = "-"
-                departement_name = "-"
-                sous_prefecture_name = "-"
-                
-                if localisation:
-                    if localisation.region_id:
-                        try:
-                            region = db.query(TRegion).filter(TRegion.id == localisation.region_id).first()
-                            if region:
-                                region_name = region.nom
-                        except Exception as e:
-                            logger.warning(f"Erreur lors de la récupération de la région: {e}")
-                    
-                    if localisation.departement_id:
-                        try:
-                            departement = db.query(TDepartement).filter(TDepartement.id == localisation.departement_id).first()
-                            if departement:
-                                departement_name = departement.nom
-                        except Exception as e:
-                            logger.warning(f"Erreur lors de la récupération du département: {e}")
-                    
-                    if localisation.sous_prefecture_id:
-                        try:
-                            sous_pref = db.query(TSousPrefecture).filter(TSousPrefecture.id == localisation.sous_prefecture_id).first()
-                            if sous_pref:
-                                sous_prefecture_name = sous_pref.nom
-                        except Exception as e:
-                            logger.warning(f"Erreur lors de la récupération de la sous-préfecture: {e}")
-                
-                # Récupérer tous les projets de l'employé
-                projets_list = []
-                try:
-                    fic_personne_projets = db.query(FicPersonneProjet).filter(
-                        FicPersonneProjet.fic_personne_id == personne.id
-                    ).all()
-                    
-                    for fp_proj in fic_personne_projets:
-                        projet = db.query(Projet).filter(Projet.id == fp_proj.projet_id).first()
-                        if projet:
-                            projets_list.append({
-                                "id": projet.id,
-                                "nom": projet.nom,
-                                "nom_complet": projet.nom_complet
-                            })
-                except Exception as e:
-                    logger.warning(f"Erreur lors de la récupération des projets pour {personne.id}: {e}")
-                
-                employee = {
-                    "id": personne.id,
-                    "nom": personne.nom,
-                    "prenom": personne.prenom,
-                    "matricule": personne.matricule or "-",
-                    "date_naissance": personne.date_naissance.isoformat() if personne.date_naissance else None,
-                    "genre": personne.genre or "M",
-                    "contact": personne.contact or "-",
+                employees_dict[emp_id] = {
+                    "id": row[0],
+                    "nom": normalize_utf8(row[1]),
+                    "prenom": normalize_utf8(row[2]),
+                    "matricule": normalize_utf8(row[3] or "-"),
+                    "date_naissance": row[4].isoformat() if row[4] else None,
+                    "genre": row[5] or "M",
+                    "contact": normalize_utf8(row[6] or "-"),
                     "age": age,
-                    "poste": contrat.poste_nom if contrat else "Non spécifié",
-                    "categorie_poste": contrat.categorie_poste if contrat else "-",
-                    "qualification": contrat.poste if contrat else "-",
-                    "type_personne": contrat.type_personne if contrat else "-",
-                    "statut": contrat.type_personne if contrat else "-",
-                    "diplome": contrat.diplome if contrat else "-",
-                    "ecole": contrat.ecole if contrat and contrat.ecole else "-",
-                    "type_contrat": contrat.type_contrat if contrat else "-",
-                    "date_debut": contrat.date_debut.isoformat() if contrat and contrat.date_debut else None,
-                    "date_fin": contrat.date_fin.isoformat() if contrat and contrat.date_fin else None,
-                    "validiteContrat": ("En cours" if is_active else "Expiré") if contrat else "-",
-                    "qualiteContrat": contrat.categorie_poste if contrat else "-",
+                    "poste": normalize_utf8(row[8] if row[8] else "Non spécifié"),
+                    "categorie_poste": normalize_utf8(row[9] if row[9] else "-"),
+                    "qualification": normalize_utf8(row[10] if row[10] else "-"),
+                    "type_personne": normalize_utf8(row[11] if row[11] else "-"),
+                    "statut": normalize_utf8(row[11] if row[11] else "-"),
+                    "diplome": normalize_utf8(row[12] if row[12] else "-"),
+                    "ecole": normalize_utf8(row[13] if row[13] else "-"),
+                    "type_contrat": normalize_utf8(row[14] if row[14] else "-"),
+                    "date_debut": row[15].isoformat() if row[15] else None,
+                    "date_fin": row[16].isoformat() if row[16] else None,
+                    "validiteContrat": ("En cours" if is_active else "Expiré") if row[10] else "-",
+                    "qualiteContrat": normalize_utf8(row[9] if row[9] else "-"),
                     "is_active": is_active,
-                    "region": region_name,
-                    "departement": departement_name,
-                    "sousPrefecture": sous_prefecture_name,
-                    "projets": projets_list,
-                    "contrat_id": contrat.id if contrat else None,
+                    "region": normalize_utf8(row[19] if row[19] else "-"),
+                    "departement": normalize_utf8(row[20] if row[20] else "-"),
+                    "sousPrefecture": normalize_utf8(row[21] if row[21] else "-"),
+                    "projets": [],
+                    "contrat_id": row[7],
                 }
-                
-                employees.append(employee)
-            except Exception as e:
-                logger.error(f"Erreur lors du traitement de l'employé {personne.id}: {e}")
-                continue
+            
+            # Ajouter le projet s'il existe
+            if row[22]:  # projet_id
+                projet_exists = any(p["id"] == row[22] for p in employees_dict[emp_id]["projets"])
+                if not projet_exists:
+                    employees_dict[emp_id]["projets"].append({
+                        "id": row[22],
+                        "nom": row[23],
+                        "nom_complet": row[24]
+                    })
+        
+        employees = list(employees_dict.values())
         
         logger.info(f"Nombre d'employés retournés: {len(employees)}")
         return employees
