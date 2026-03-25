@@ -61,7 +61,6 @@ async def register(username: str, password: str, acteur_id: str, db: Session = D
         id=str(uuid.uuid4()),
         username=username,
         password=hash_password(password),
-        role=acteur.type_acteur,
         acteur_id=acteur_id
     )
     
