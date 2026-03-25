@@ -38,9 +38,7 @@ async def create_zone(zone: ZoneDInterventionCreate, db: Session = Depends(get_d
         id=str(uuid.uuid4()),
         acteur_id=zone.acteur_id,
         projet_id=zone.projet_id,
-        region_id=zone.region_id,
-        departement_id=zone.departement_id,
-        sous_prefecture_id=zone.sous_prefecture_id
+        region_id=zone.region_id
     )
     db.add(db_zone)
     db.commit()
@@ -64,8 +62,6 @@ async def update_zone(zone_id: str, zone: ZoneDInterventionCreate, db: Session =
     db_zone.acteur_id = zone.acteur_id
     db_zone.projet_id = zone.projet_id
     db_zone.region_id = zone.region_id
-    db_zone.departement_id = zone.departement_id
-    db_zone.sous_prefecture_id = zone.sous_prefecture_id
     
     db.commit()
     db.refresh(db_zone)
