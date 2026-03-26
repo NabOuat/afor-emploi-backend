@@ -61,30 +61,30 @@ class Acteur(Base):
     email_2 = Column(String)
     date_creation = Column(DateTime, default=datetime.utcnow)
     
-    login = relationship("Login", back_populates="acteur", uselist=False, cascade="all, delete-orphan")
+    user = relationship("Users", back_populates="acteur", uselist=False, cascade="all, delete-orphan")
     zones_intervention = relationship("ZoneDIntervention", back_populates="acteur", cascade="all, delete-orphan")
     fic_personne_projets = relationship("FicPersonneProjet", back_populates="acteur", cascade="all, delete-orphan")
     actions = relationship("UserAction", back_populates="acteur", cascade="all, delete-orphan")
 
 
-class Login(Base):
-    __tablename__ = "login"
+class Users(Base):
+    __tablename__ = "users"
     
     id = Column(String, primary_key=True)
     username = Column(String, nullable=False, unique=True)
     password = Column(String, nullable=False)
     acteur_id = Column(String, ForeignKey("acteur.id", ondelete="CASCADE"), nullable=False, unique=True)
     
-    acteur = relationship("Acteur", back_populates="login")
-    administrateur = relationship("Administrateur", back_populates="login", uselist=False, cascade="all, delete-orphan")
-    actions = relationship("UserAction", back_populates="login", cascade="all, delete-orphan")
+    acteur = relationship("Acteur", back_populates="user")
+    administrateur = relationship("Administrateur", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    actions = relationship("UserAction", back_populates="user", cascade="all, delete-orphan")
 
 
 class Administrateur(Base):
     __tablename__ = "administrateur"
     
     id = Column(String, primary_key=True)
-    login_id = Column(String, ForeignKey("login.id", ondelete="CASCADE"), nullable=False, unique=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
     nom = Column(String, nullable=False)
     prenom = Column(String, nullable=False)
     email = Column(String)
@@ -92,7 +92,7 @@ class Administrateur(Base):
     role = Column(String)
     date_creation = Column(DateTime, default=datetime.utcnow)
     
-    login = relationship("Login", back_populates="administrateur")
+    user = relationship("Users", back_populates="administrateur")
 
 
 # ============================================
@@ -240,7 +240,7 @@ class UserAction(Base):
     __tablename__ = "user_actions"
     
     id = Column(String, primary_key=True)
-    login_id = Column(String, ForeignKey("login.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     username = Column(String, nullable=False)
     acteur_id = Column(String, ForeignKey("acteur.id", ondelete="CASCADE"), nullable=False)
     action_type = Column(String, nullable=False)
@@ -252,5 +252,5 @@ class UserAction(Base):
     status = Column(String, default="success")
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    login = relationship("Login", back_populates="actions")
+    user = relationship("Users", back_populates="actions")
     acteur = relationship("Acteur", back_populates="actions")

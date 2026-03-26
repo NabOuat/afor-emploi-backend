@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from datetime import datetime, date, timedelta
 from app.database import get_db
-from app.models import FicPersonne, Contrat, Acteur, Login, ZoneDIntervention, UserAction, FicPersonneLocalisation, Projet, FicPersonneProjet
+from app.models import FicPersonne, Contrat, Acteur, Users, ZoneDIntervention, UserAction, FicPersonneLocalisation, Projet, FicPersonneProjet
 from app.security import get_current_user
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])

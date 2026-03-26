@@ -20,7 +20,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.database import SessionLocal
-from app.models import Acteur, Login, Administrateur
+from app.models import Acteur, Users, Administrateur
 from app.security import hash_password
 
 
@@ -78,23 +78,23 @@ def create_users():
         admin_username = "admin_afor"
         admin_password = "Admin@2026"
 
-        existing_login = db.query(Login).filter(Login.username == admin_username).first()
+        existing_login = db.query(Users).filter(Users.username == admin_username).first()
         if existing_login:
             print(f"ℹ️  Login admin '{admin_username}' existe déjà.")
         else:
-            admin_login = Login(
+            admin_user = Users(
                 id=str(uuid.uuid4()),
                 username=admin_username,
                 password=hash_password(admin_password),
                 acteur_id=admin_acteur_id,
             )
-            db.add(admin_login)
+            db.add(admin_user)
             db.flush()
 
             # Créer l'entrée Administrateur
             admin_entry = Administrateur(
                 id=str(uuid.uuid4()),
-                login_id=admin_login.id,
+                user_id=admin_user.id,
                 nom="OUATTARA",
                 prenom="Admin",
                 email=afor.email_1 or "admin@afor.bf",
@@ -107,17 +107,17 @@ def create_users():
         respo_username = "respo_afor"
         respo_password = "Respo@2026"
 
-        existing_login = db.query(Login).filter(Login.username == respo_username).first()
+        existing_login = db.query(Users).filter(Users.username == respo_username).first()
         if existing_login:
             print(f"ℹ️  Login responsable '{respo_username}' existe déjà.")
         else:
-            respo_login = Login(
+            respo_user = Users(
                 id=str(uuid.uuid4()),
                 username=respo_username,
                 password=hash_password(respo_password),
                 acteur_id=respo_acteur_id,
             )
-            db.add(respo_login)
+            db.add(respo_user)
             print(f"✅ Login Responsable créé : {respo_username} / {respo_password}")
 
         # ── 6. Commit ─────────────────────────────────────────────────────

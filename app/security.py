@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.config import settings
-from app.models import Login
+from app.models import Users
 from app.database import get_db
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -53,7 +53,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except JWTError:
         raise credential_exception
     
-    user = db.query(Login).filter(Login.username == username).first()
+    user = db.query(Users).filter(Users.username == username).first()
     if user is None:
         raise credential_exception
     return user

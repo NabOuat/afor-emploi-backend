@@ -48,14 +48,14 @@ class TSousPrefecture(TSousPrefectureBase):
 # AUTHENTICATION SCHEMAS
 # ============================================
 
-class LoginBase(BaseModel):
+class UsersBase(BaseModel):
     username: str
 
-class LoginCreate(LoginBase):
+class UsersCreate(UsersBase):
     password: str
     acteur_id: str
 
-class Login(LoginBase):
+class Users(UsersBase):
     id: str
     acteur_id: str
     class Config:
@@ -70,11 +70,11 @@ class AdministrateurBase(BaseModel):
     role: Optional[str] = None
 
 class AdministrateurCreate(AdministrateurBase):
-    login_id: str
+    user_id: str
 
 class Administrateur(AdministrateurBase):
     id: str
-    login_id: str
+    user_id: str
     date_creation: datetime
     class Config:
         from_attributes = True
@@ -235,7 +235,7 @@ class LoginRequest(BaseModel):
 # ============================================
 
 class UserActionCreate(BaseModel):
-    login_id: str
+    user_id: str
     username: str
     acteur_id: str
     action_type: str
@@ -246,7 +246,7 @@ class UserActionCreate(BaseModel):
 
 class UserActionResponse(BaseModel):
     id: str
-    login_id: str
+    user_id: str
     username: str
     acteur_id: str
     action_type: str

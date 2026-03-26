@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List
 from app.database import get_db
-from app.models import UserAction, Login
+from app.models import UserAction, Users
 from app.schemas import UserActionCreate, UserActionResponse
 from app.security import get_current_user
 import uuid
@@ -20,7 +20,7 @@ async def log_user_action(
     try:
         user_action = UserAction(
             id=str(uuid.uuid4()),
-            login_id=action.login_id,
+            user_id=action.user_id,
             username=action.username,
             acteur_id=action.acteur_id,
             action_type=action.action_type,
@@ -39,9 +39,9 @@ async def log_user_action(
         db.rollback()
         return {"status": "error", "message": str(e)}
 
-@router.get("/user/{login_id}", response_model=List[UserActionResponse])
+@router.get("/user/{user_id}", response_model=List[UserActionResponse])
 async def get_user_actions(
-    login_id: str,
+    user_id: str,
     days: int = 7,
     db: Session = Depends(get_db)
 ):
@@ -49,7 +49,7 @@ async def get_user_actions(
     start_date = datetime.utcnow() - timedelta(days=days)
     
     actions = db.query(UserAction).filter(
-        UserAction.login_id == login_id,
+        UserAction.user_id == user_id,
         UserAction.created_at >= start_date
     ).order_by(UserAction.created_at.desc()).all()
     
