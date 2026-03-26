@@ -61,7 +61,7 @@ class Acteur(Base):
     email_2 = Column(String)
     date_creation = Column(DateTime, default=datetime.utcnow)
     
-    user = relationship("Users", back_populates="acteur", uselist=False, cascade="all, delete-orphan")
+    users = relationship("Users", back_populates="acteur", cascade="all, delete-orphan")
     zones_intervention = relationship("ZoneDIntervention", back_populates="acteur", cascade="all, delete-orphan")
     fic_personne_projets = relationship("FicPersonneProjet", back_populates="acteur", cascade="all, delete-orphan")
     actions = relationship("UserAction", back_populates="acteur", cascade="all, delete-orphan")
@@ -75,9 +75,9 @@ class Users(Base):
     password = Column(String, nullable=False)
     nom = Column(String, nullable=True)
     prenom = Column(String, nullable=True)
-    acteur_id = Column(String, ForeignKey("acteur.id", ondelete="CASCADE"), nullable=False, unique=True)
+    acteur_id = Column(String, ForeignKey("acteur.id", ondelete="CASCADE"), nullable=False)
     
-    acteur = relationship("Acteur", back_populates="user")
+    acteur = relationship("Acteur", back_populates="users")
     administrateur = relationship("Administrateur", back_populates="user", uselist=False, cascade="all, delete-orphan")
     actions = relationship("UserAction", back_populates="user", cascade="all, delete-orphan")
 
