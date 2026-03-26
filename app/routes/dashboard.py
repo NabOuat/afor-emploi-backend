@@ -1030,3 +1030,37 @@ async def invalidate_operator_cache(acteur_id: str):
     """Vide le cache backend pour cet acteur (à appeler après un import)."""
     _cache_invalidate(acteur_id)
     return {"ok": True}
+
+
+@router.get("/admin/stats")
+async def get_admin_stats(db: Session = Depends(get_db)):
+    """Statistiques globales pour le dashboard administrateur"""
+    try:
+        today = date.today()
+        total_acteurs = db.query(func.count(Acteur.id)).scalar() or 0
+        total_personnel = db.query(func.count(func.distinct(FicPersonne.id))).join(
+            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
+        ).scalar() or 0
+        employes_actifs = db.query(func.count(func.distinct(FicPersonne.id))).join(
+            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
+        ).join(
+            Contrat, FicPersonne.id == Contrat.fic_personne_id
+        ).filter(
+            Contrat.date_debut <= today,
+            or_(Contrat.date_fin >= today, Contrat.date_fin.is_(None))
+        ).scalar() or 0
+        total_projets = db.query(func.count(Projet.id)).scalar() or 0
+
+        acteurs_par_type = db.query(
+            Acteur.type_acteur, func.count(Acteur.id)
+        ).group_by(Acteur.type_acteur).all()
+
+        return {
+            "total_acteurs": total_acteurs,
+            "total_personnel": total_personnel,
+            "employes_actifs": employes_actifs,
+            "total_projets": total_projets,
+            "acteurs_par_type": {t: c for t, c in acteurs_par_type},
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
