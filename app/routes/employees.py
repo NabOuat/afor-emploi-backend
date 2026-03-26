@@ -191,6 +191,7 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
             
             # Ajouter le projet s'il existe
             if row[22]:  # projet_id
+                logger.info(f"🔍 Projet trouvé pour employé {emp_id}: ID={row[22]}, Nom={row[23]}")
                 projet_exists = any(p["id"] == row[22] for p in employees_dict[emp_id]["projets"])
                 if not projet_exists:
                     employees_dict[emp_id]["projets"].append({
@@ -198,10 +199,15 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
                         "nom": row[23],
                         "nom_complet": row[24]
                     })
+                    logger.info(f"✅ Projet ajouté à l'employé {emp_id}")
+            else:
+                logger.warning(f"⚠️ Aucun projet trouvé pour employé {emp_id} (row[22] est None)")
         
         employees = list(employees_dict.values())
         
         logger.info(f"Nombre d'employés retournés: {len(employees)}")
+        for emp in employees:
+            logger.info(f"📋 Employé {emp['nom']} {emp['prenom']}: {len(emp['projets'])} projet(s) - {emp['projets']}")
         return employees
         
     except Exception as e:
