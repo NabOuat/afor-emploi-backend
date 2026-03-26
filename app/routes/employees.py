@@ -110,8 +110,7 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
             LEFT JOIN tregion tr ON fpl.region_id = tr.id
             LEFT JOIN tdepartement td ON fpl.departement_id = td.id
             LEFT JOIN tsousprefecture ts ON fpl.sous_prefecture_id = ts.id
-            LEFT JOIN fic_personne_projet fpp2 ON fp.id = fpp2.fic_personne_id
-            LEFT JOIN projet p ON fpp2.projet_id = p.id
+            LEFT JOIN projet p ON fpp.projet_id = p.id
             WHERE fpp.acteur_id = :acteur_id
             ORDER BY fp.id, c.date_debut DESC
         """), {"acteur_id": acteur_id})
