@@ -177,10 +177,12 @@ class FicPersonne(Base):
     genre = Column(String)
     contact = Column(String)
     matricule = Column(String, unique=True)
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     
     projets = relationship("FicPersonneProjet", back_populates="fic_personne", cascade="all, delete-orphan")
     supervision = relationship("Supervision", back_populates="fic_personne", uselist=False, cascade="all, delete-orphan")
     contrat = relationship("Contrat", back_populates="fic_personne", uselist=False, cascade="all, delete-orphan", foreign_keys="Contrat.fic_personne_id")
+    creator = relationship("Users", foreign_keys=[created_by])
 
 
 class Supervision(Base):

@@ -103,7 +103,11 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
                 fpp.projet_id as fpp_projet_id,
                 p.id as projet_id,
                 p.nom as projet_nom,
-                p.nom_complet as projet_nom_complet
+                p.nom_complet as projet_nom_complet,
+                fp.created_by,
+                u.username as created_by_username,
+                u.nom as created_by_nom,
+                u.prenom as created_by_prenom
             FROM fic_personne_projet fpp
             INNER JOIN fic_personne fp ON fpp.fic_personne_id = fp.id
             LEFT JOIN contrat c ON fp.id = c.fic_personne_id
@@ -112,6 +116,7 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
             LEFT JOIN tdepartement td ON fpl.departement_id = td.id
             LEFT JOIN tsousprefecture ts ON fpl.sous_prefecture_id = ts.id
             LEFT JOIN projet p ON fpp.projet_id = p.id
+            LEFT JOIN users u ON fp.created_by = u.id
             WHERE fpp.acteur_id = :acteur_id
             ORDER BY fp.id, c.date_debut DESC
         """), {"acteur_id": acteur_id})
@@ -188,6 +193,10 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
                     "sousPrefecture": normalize_utf8(row[22] if row[22] else "-"),
                     "projets": [],
                     "contrat_id": row[7],
+                    "created_by": row[27],
+                    "created_by_username": normalize_utf8(row[28]) if row[28] else None,
+                    "created_by_nom": normalize_utf8(row[29]) if row[29] else None,
+                    "created_by_prenom": normalize_utf8(row[30]) if row[30] else None,
                 }
             
             # Ajouter le projet s'il existe
