@@ -100,11 +100,12 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
                 tr.nom as region_nom,
                 td.nom as departement_nom,
                 ts.nom as sous_prefecture_nom,
+                fpp.projet_id as fpp_projet_id,
                 p.id as projet_id,
                 p.nom as projet_nom,
                 p.nom_complet as projet_nom_complet
-            FROM fic_personne fp
-            INNER JOIN fic_personne_projet fpp ON fp.id = fpp.fic_personne_id
+            FROM fic_personne_projet fpp
+            INNER JOIN fic_personne fp ON fpp.fic_personne_id = fp.id
             LEFT JOIN contrat c ON fp.id = c.fic_personne_id
             LEFT JOIN fic_personne_localisation fpl ON c.id = fpl.contrat_id
             LEFT JOIN tregion tr ON fpl.region_id = tr.id
@@ -182,32 +183,27 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
                     "validiteContrat": ("En cours" if is_active else "Expiré") if date_debut else "-",
                     "qualiteContrat": normalize_utf8(row[9] if row[9] else "-"),
                     "is_active": is_active,
-                    "region": normalize_utf8(row[19] if row[19] else "-"),
-                    "departement": normalize_utf8(row[20] if row[20] else "-"),
-                    "sousPrefecture": normalize_utf8(row[21] if row[21] else "-"),
+                    "region": normalize_utf8(row[20] if row[20] else "-"),
+                    "departement": normalize_utf8(row[21] if row[21] else "-"),
+                    "sousPrefecture": normalize_utf8(row[22] if row[22] else "-"),
                     "projets": [],
                     "contrat_id": row[7],
                 }
             
             # Ajouter le projet s'il existe
-            if row[22]:  # projet_id
-                logger.info(f"🔍 Projet trouvé pour employé {emp_id}: ID={row[22]}, Nom={row[23]}")
-                projet_exists = any(p["id"] == row[22] for p in employees_dict[emp_id]["projets"])
+            # row[23] = fpp.projet_id, row[24] = p.id, row[25] = p.nom, row[26] = p.nom_complet
+            if row[23] and row[24]:
+                projet_exists = any(p["id"] == row[24] for p in employees_dict[emp_id]["projets"])
                 if not projet_exists:
                     employees_dict[emp_id]["projets"].append({
-                        "id": row[22],
-                        "nom": row[23],
-                        "nom_complet": row[24]
+                        "id": row[24],
+                        "nom": row[25],
+                        "nom_complet": row[26]
                     })
-                    logger.info(f"✅ Projet ajouté à l'employé {emp_id}")
-            else:
-                logger.warning(f"⚠️ Aucun projet trouvé pour employé {emp_id} (row[22] est None)")
         
         employees = list(employees_dict.values())
         
         logger.info(f"Nombre d'employés retournés: {len(employees)}")
-        for emp in employees:
-            logger.info(f"📋 Employé {emp['nom']} {emp['prenom']}: {len(emp['projets'])} projet(s) - {emp['projets']}")
         return employees
         
     except Exception as e:
