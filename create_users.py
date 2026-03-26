@@ -86,6 +86,8 @@ def create_users():
                 id=str(uuid.uuid4()),
                 username=admin_username,
                 password=hash_password(admin_password),
+                nom="OUATTARA",
+                prenom="Admin",
                 acteur_id=admin_acteur_id,
             )
             db.add(admin_user)
@@ -115,6 +117,8 @@ def create_users():
                 id=str(uuid.uuid4()),
                 username=respo_username,
                 password=hash_password(respo_password),
+                nom="OUATTARA",
+                prenom="Responsable",
                 acteur_id=respo_acteur_id,
             )
             db.add(respo_user)

@@ -73,6 +73,8 @@ class Users(Base):
     id = Column(String, primary_key=True)
     username = Column(String, nullable=False, unique=True)
     password = Column(String, nullable=False)
+    nom = Column(String, nullable=True)
+    prenom = Column(String, nullable=True)
     acteur_id = Column(String, ForeignKey("acteur.id", ondelete="CASCADE"), nullable=False, unique=True)
     
     acteur = relationship("Acteur", back_populates="user")

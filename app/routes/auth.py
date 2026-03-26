@@ -38,6 +38,8 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "actor_type": acteur.type_acteur,
         "username": user.username,
+        "nom": user.nom,
+        "prenom": user.prenom,
         "acteur_id": user.acteur_id
     }
 
@@ -68,4 +70,4 @@ async def register(username: str, password: str, acteur_id: str, db: Session = D
     db.commit()
     db.refresh(new_user)
     
-    return {"id": new_user.id, "username": new_user.username}
+    return {"id": new_user.id, "username": new_user.username, "nom": new_user.nom, "prenom": new_user.prenom}

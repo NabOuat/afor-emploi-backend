@@ -50,6 +50,8 @@ class TSousPrefecture(TSousPrefectureBase):
 
 class UsersBase(BaseModel):
     username: str
+    nom: Optional[str] = None
+    prenom: Optional[str] = None
 
 class UsersCreate(UsersBase):
     password: str
