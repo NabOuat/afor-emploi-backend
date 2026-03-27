@@ -36,6 +36,7 @@ class CreateEmployeeRequest(BaseModel):
     projets: list[ProjetSelection] = []
     projet_id: Optional[str] = None
     engagement_id: Optional[str] = None
+    created_by: Optional[str] = None
 
 class CreateEmployeeResponse(BaseModel):
     id: str
@@ -75,7 +76,8 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
             date_naissance=request.date_naissance,
             genre=request.genre,
             contact=request.contact,
-            matricule=request.matricule
+            matricule=request.matricule,
+            created_by=request.created_by
         )
         
         log_db_operation("INSERT", "fic_personne", {
