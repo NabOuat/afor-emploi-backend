@@ -2,11 +2,36 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
-from app.models import ZoneDIntervention, Acteur, Projet
+from app.models import ZoneDIntervention, Acteur, Projet, TRegion
 from app.schemas import ZoneDIntervention as ZoneDInterventionSchema, ZoneDInterventionCreate
 import uuid
 
 router = APIRouter(prefix="/api/zones-intervention", tags=["zones-intervention"])
+
+@router.get("/full")
+async def get_zones_full(acteur_id: str = None, projet_id: str = None, db: Session = Depends(get_db)):
+    """Zones d'intervention avec noms des acteurs, projets et régions."""
+    query = db.query(ZoneDIntervention)
+    if acteur_id:
+        query = query.filter(ZoneDIntervention.acteur_id == acteur_id)
+    if projet_id:
+        query = query.filter(ZoneDIntervention.projet_id == projet_id)
+    result = []
+    for z in query.all():
+        acteur = db.query(Acteur).filter(Acteur.id == z.acteur_id).first()
+        projet = db.query(Projet).filter(Projet.id == z.projet_id).first()
+        region = db.query(TRegion).filter(TRegion.id == z.region_id).first() if z.region_id else None
+        result.append({
+            "id": z.id,
+            "acteur_id": z.acteur_id,
+            "acteur_nom": acteur.nom if acteur else None,
+            "type_acteur": acteur.type_acteur if acteur else None,
+            "projet_id": z.projet_id,
+            "projet_nom": projet.nom if projet else None,
+            "region_id": z.region_id,
+            "region_nom": region.nom if region else None,
+        })
+    return result
 
 @router.get("", response_model=List[ZoneDInterventionSchema])
 async def get_zones(acteur_id: str = None, projet_id: str = None, db: Session = Depends(get_db)):

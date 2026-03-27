@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.config import settings
-from app.models import Users
+from app.models import Users, Acteur
 from app.database import get_db
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -57,3 +57,14 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if user is None:
         raise credential_exception
     return user
+
+
+async def require_admin(current_user: Users = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Vérifie que l'utilisateur connecté est de type AD (Administrateur)."""
+    acteur = db.query(Acteur).filter(Acteur.id == current_user.acteur_id).first()
+    if not acteur or acteur.type_acteur != "AD":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès réservé aux administrateurs",
+        )
+    return current_user
