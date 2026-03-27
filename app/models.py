@@ -75,6 +75,7 @@ class Users(Base):
     password = Column(String, nullable=False)
     nom = Column(String, nullable=True)
     prenom = Column(String, nullable=True)
+    email = Column(String, nullable=True)
     acteur_id = Column(String, ForeignKey("acteur.id", ondelete="CASCADE"), nullable=False)
     
     acteur = relationship("Acteur", back_populates="users")

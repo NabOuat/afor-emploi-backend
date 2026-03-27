@@ -43,6 +43,106 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         "acteur_id": user.acteur_id
     }
 
+@router.post("/change-password")
+async def change_password(
+    data: dict,
+    db: Session = Depends(get_db)
+):
+    username    = data.get("username")
+    old_password = data.get("old_password")
+    new_password = data.get("new_password")
+
+    if not username or not old_password or not new_password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Champs manquants")
+
+    user = db.query(Users).filter(Users.username == username).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable")
+
+    if not verify_password(old_password, user.password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Ancien mot de passe incorrect")
+
+    if len(new_password) < 8:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le mot de passe doit contenir au moins 8 caractères")
+
+    user.password = hash_password(new_password)
+    db.commit()
+    return {"message": "Mot de passe mis à jour avec succès"}
+
+
+@router.put("/update-profile")
+async def update_profile(
+    data: dict,
+    db: Session = Depends(get_db)
+):
+    username = data.get("username")
+    if not username:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username requis")
+
+    user = db.query(Users).filter(Users.username == username).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable")
+
+    if "nom" in data:
+        user.nom = data["nom"]
+    if "prenom" in data:
+        user.prenom = data["prenom"]
+    if "email" in data:
+        user.email = data["email"] or None
+
+    db.commit()
+    db.refresh(user)
+    return {
+        "username": user.username,
+        "nom": user.nom,
+        "prenom": user.prenom,
+        "email": user.email,
+        "acteur_id": user.acteur_id,
+    }
+
+
+@router.get("/me/{username}")
+async def get_me(username: str, db: Session = Depends(get_db)):
+    user = db.query(Users).filter(Users.username == username).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable")
+    return {
+        "username": user.username,
+        "nom": user.nom,
+        "prenom": user.prenom,
+        "email": user.email,
+        "acteur_id": user.acteur_id,
+    }
+
+
+@router.post("/send-test-report")
+async def send_test_report(data: dict, db: Session = Depends(get_db)):
+    """Envoie immédiatement le rapport à un responsable (test ou envoi manuel)."""
+    username = data.get("username")
+    if not username:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username requis")
+
+    user = db.query(Users).filter(Users.username == username).first()
+    if not user or not user.email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Utilisateur sans email configuré")
+
+    from app.email_service import compute_weekly_stats, build_email_html, send_email
+    from datetime import datetime
+
+    stats   = compute_weekly_stats(db)
+    name    = f"{user.prenom or ''} {user.nom or ''}".strip() or user.username
+    week    = datetime.now().isocalendar()[1]
+    year    = datetime.now().year
+    subject = f"[AFOR Emploi] Rapport hebdomadaire — Semaine {week} / {year}"
+    html    = build_email_html(name, stats)
+    ok      = send_email(user.email, name, subject, html)
+
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail="Échec de l'envoi — vérifiez la configuration SMTP dans .env")
+    return {"message": f"Rapport envoyé à {user.email}"}
+
+
 @router.post("/register")
 async def register(username: str, password: str, acteur_id: str, db: Session = Depends(get_db)):
     existing_user = db.query(Users).filter(Users.username == username).first()
