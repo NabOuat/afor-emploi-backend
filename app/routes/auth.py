@@ -4,7 +4,7 @@ from datetime import timedelta
 from app.database import get_db
 from app.models import Users, Acteur
 from app.schemas import LoginRequest, TokenResponse
-from app.security import verify_password, create_access_token, hash_password
+from app.security import verify_password, create_access_token, hash_password, require_admin
 from app.config import settings
 import uuid
 
@@ -141,6 +141,81 @@ async def send_test_report(data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail="Échec de l'envoi — vérifiez la configuration SMTP dans .env")
     return {"message": f"Rapport envoyé à {user.email}"}
+
+
+@router.get("/users")
+async def list_users(db: Session = Depends(get_db), _: Users = Depends(require_admin)):
+    """Liste tous les utilisateurs avec leurs infos acteur."""
+    users = db.query(Users).all()
+    result = []
+    for u in users:
+        acteur = db.query(Acteur).filter(Acteur.id == u.acteur_id).first()
+        result.append({
+            "id": u.id,
+            "username": u.username,
+            "nom": u.nom,
+            "prenom": u.prenom,
+            "email": u.email,
+            "acteur_id": u.acteur_id,
+            "acteur_nom": acteur.nom if acteur else None,
+            "type_acteur": acteur.type_acteur if acteur else None,
+        })
+    return result
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(user_id: str, db: Session = Depends(get_db), _: Users = Depends(require_admin)):
+    """Supprime un utilisateur."""
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable")
+    db.delete(user)
+    db.commit()
+    return {"message": "Utilisateur supprimé"}
+
+
+@router.post("/users")
+async def create_user(data: dict, db: Session = Depends(get_db), _: Users = Depends(require_admin)):
+    """Crée un utilisateur depuis l'interface admin."""
+    username   = data.get("username")
+    password   = data.get("password")
+    acteur_id  = data.get("acteur_id")
+    nom        = data.get("nom")
+    prenom     = data.get("prenom")
+    email      = data.get("email")
+
+    if not username or not password or not acteur_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="username, password et acteur_id sont requis")
+
+    if db.query(Users).filter(Users.username == username).first():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce nom d'utilisateur existe déjà")
+
+    acteur = db.query(Acteur).filter(Acteur.id == acteur_id).first()
+    if not acteur:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Acteur introuvable")
+
+    new_user = Users(
+        id=str(uuid.uuid4()),
+        username=username,
+        password=hash_password(password),
+        nom=nom,
+        prenom=prenom,
+        email=email,
+        acteur_id=acteur_id,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return {
+        "id": new_user.id,
+        "username": new_user.username,
+        "nom": new_user.nom,
+        "prenom": new_user.prenom,
+        "email": new_user.email,
+        "acteur_id": new_user.acteur_id,
+        "acteur_nom": acteur.nom,
+        "type_acteur": acteur.type_acteur,
+    }
 
 
 @router.post("/register")

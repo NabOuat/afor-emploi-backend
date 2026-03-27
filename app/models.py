@@ -79,7 +79,7 @@ class Users(Base):
     acteur_id = Column(String, ForeignKey("acteur.id", ondelete="CASCADE"), nullable=False)
     
     acteur = relationship("Acteur", back_populates="users")
-    administrateur = relationship("Administrateur", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    administrateur = relationship("Administrateur", back_populates="user", uselist=False, cascade="all, delete-orphan", passive_deletes=True)
     actions = relationship("UserAction", back_populates="user", cascade="all, delete-orphan")
 
 
