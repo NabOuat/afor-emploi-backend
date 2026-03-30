@@ -254,7 +254,7 @@ async def update_employee(employee_id: str, request: CreateEmployeeRequest, db: 
             contrat.date_debut = request.date_debut or contrat.date_debut
             contrat.date_fin = request.date_fin
             contrat.diplome = request.diplome
-            contrat.ecole = [request.ecole] if request.ecole else None
+            contrat.ecole = request.ecole
         else:
             # Créer un nouveau contrat si aucun n'existe
             if effective_poste_nom and request.date_debut:
