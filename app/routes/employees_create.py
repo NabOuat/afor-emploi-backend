@@ -36,6 +36,7 @@ class CreateEmployeeRequest(BaseModel):
     projets: list[ProjetSelection] = []
     projet_id: Optional[str] = None
     engagement_id: Optional[str] = None
+    created_by: Optional[str] = None
 
 class CreateEmployeeResponse(BaseModel):
     id: str
@@ -75,7 +76,8 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
             date_naissance=request.date_naissance,
             genre=request.genre,
             contact=request.contact,
-            matricule=request.matricule
+            matricule=request.matricule,
+            created_by=request.created_by
         )
         
         log_db_operation("INSERT", "fic_personne", {
@@ -252,7 +254,7 @@ async def update_employee(employee_id: str, request: CreateEmployeeRequest, db: 
             contrat.date_debut = request.date_debut or contrat.date_debut
             contrat.date_fin = request.date_fin
             contrat.diplome = request.diplome
-            contrat.ecole = [request.ecole] if request.ecole else None
+            contrat.ecole = request.ecole
         else:
             # Créer un nouveau contrat si aucun n'existe
             if effective_poste_nom and request.date_debut:

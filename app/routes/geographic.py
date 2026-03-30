@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
 from app.models import TRegion, TDepartement, TSousPrefecture
 from app.schemas import TRegion as TRegionSchema, TRegionCreate, TDepartement as TDepartementSchema, TDepartementCreate, TSousPrefecture as TSousPrefectureSchema, TSousPrefectureCreate
-import uuid
+import uuid, csv, io
 
 router = APIRouter(prefix="/api/geographic", tags=["geographic"])
 
@@ -167,3 +168,90 @@ async def delete_sousprefecture(sousprefecture_id: str, db: Session = Depends(ge
     db.delete(db_sousprefecture)
     db.commit()
     return {"message": "Sous-prefecture deleted"}
+
+
+# ============================================
+# CSV IMPORT & TEMPLATE
+# ============================================
+
+_TEMPLATES = {
+    "regions":         "nom\nNom de la Région\n",
+    "departements":    "nom,region_nom\nNom du Département,Nom de la Région\n",
+    "sousprefectures": "nom,departement_nom\nNom de la Sous-Préfecture,Nom du Département\n",
+}
+
+@router.get("/template/{type}")
+async def download_template(type: str):
+    """Télécharge le modèle CSV (compatible Excel)."""
+    if type not in _TEMPLATES:
+        raise HTTPException(status_code=400, detail="Type invalide. Valeurs: regions, departements, sousprefectures")
+    return Response(
+        content=_TEMPLATES[type].encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=modele_{type}.csv"},
+    )
+
+
+@router.post("/import-csv/{type}")
+async def import_geo_csv(type: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Importe des données géographiques depuis un fichier CSV."""
+    if type not in _TEMPLATES:
+        raise HTTPException(status_code=400, detail="Type invalide")
+
+    raw = await file.read()
+    try:
+        text = raw.decode("utf-8-sig")
+    except Exception:
+        text = raw.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(text))
+    created, skipped, errors = 0, 0, []
+
+    for i, row in enumerate(reader, 2):
+        nom = (row.get("nom") or "").strip()
+        if not nom:
+            errors.append(f"Ligne {i}: colonne 'nom' vide")
+            continue
+        try:
+            if type == "regions":
+                if db.query(TRegion).filter(TRegion.nom == nom).first():
+                    skipped += 1
+                else:
+                    db.add(TRegion(id=str(uuid.uuid4()), nom=nom))
+                    created += 1
+
+            elif type == "departements":
+                region_nom = (row.get("region_nom") or "").strip()
+                if not region_nom:
+                    errors.append(f"Ligne {i}: 'region_nom' manquant")
+                    continue
+                region = db.query(TRegion).filter(TRegion.nom == region_nom).first()
+                if not region:
+                    errors.append(f"Ligne {i}: région '{region_nom}' introuvable")
+                    continue
+                if db.query(TDepartement).filter(TDepartement.nom == nom, TDepartement.region_id == region.id).first():
+                    skipped += 1
+                else:
+                    db.add(TDepartement(id=str(uuid.uuid4()), nom=nom, region_id=region.id))
+                    created += 1
+
+            elif type == "sousprefectures":
+                dep_nom = (row.get("departement_nom") or "").strip()
+                if not dep_nom:
+                    errors.append(f"Ligne {i}: 'departement_nom' manquant")
+                    continue
+                dep = db.query(TDepartement).filter(TDepartement.nom == dep_nom).first()
+                if not dep:
+                    errors.append(f"Ligne {i}: département '{dep_nom}' introuvable")
+                    continue
+                if db.query(TSousPrefecture).filter(TSousPrefecture.nom == nom, TSousPrefecture.departement_id == dep.id).first():
+                    skipped += 1
+                else:
+                    db.add(TSousPrefecture(id=str(uuid.uuid4()), nom=nom, departement_id=dep.id))
+                    created += 1
+
+        except Exception as e:
+            errors.append(f"Ligne {i}: {str(e)}")
+
+    db.commit()
+    return {"created": created, "skipped": skipped, "errors": errors}
