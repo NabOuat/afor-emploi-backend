@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models import FicPersonne, FicPersonneProjet, Projet, Acteur, Contrat, FicPersonneLocalisation
 from app.utils.logger import app_logger, log_employee_creation, log_db_operation, log_error
 import uuid
-router = APIRouter(prefix="/api/employees", tags=["employees"])
+router = APIRouter(prefix="/api/employees", tags=["Employés"])
 
 class ProjetSelection(BaseModel):
     projet_id: str

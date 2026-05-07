@@ -6,7 +6,7 @@ from app.models import Projet
 from app.schemas import Projet as ProjetSchema, ProjetCreate
 import uuid
 
-router = APIRouter(prefix="/api/projets", tags=["projets"])
+router = APIRouter(prefix="/api/projets", tags=["Projets"])
 
 @router.get("", response_model=List[ProjetSchema])
 async def get_projets(db: Session = Depends(get_db)):

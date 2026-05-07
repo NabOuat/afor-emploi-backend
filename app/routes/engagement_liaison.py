@@ -6,7 +6,7 @@ from app.models import Projet, Engagement, ProjetEngagement
 import uuid
 from datetime import datetime
 
-router = APIRouter(prefix="/api/engagements", tags=["engagements-liaison"])
+router = APIRouter(prefix="/api/engagements", tags=["Assignation"])
 
 
 @router.post("/link-project")

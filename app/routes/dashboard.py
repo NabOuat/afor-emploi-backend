@@ -10,7 +10,7 @@ from app.database import get_db
 from app.models import FicPersonne, Contrat, Acteur, Users, ZoneDIntervention, UserAction, FicPersonneLocalisation, Projet, FicPersonneProjet, TRegion, TDepartement
 from app.security import get_current_user
 
-router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+router = APIRouter(prefix="/api/dashboard", tags=["Tableau de bord"])
 
 # ── Cache mémoire backend (TTL 5 min) ──────────────────────────────────────
 # Évite de retaper Supabase pour chaque visite du dashboard.

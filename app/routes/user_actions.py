@@ -8,7 +8,7 @@ from app.schemas import UserActionCreate, UserActionResponse
 from app.security import get_current_user
 import uuid
 
-router = APIRouter(prefix="/api/user-actions", tags=["user-actions"])
+router = APIRouter(prefix="/api/user-actions", tags=["Utilisateurs"])
 
 @router.post("/log", response_model=dict)
 async def log_user_action(

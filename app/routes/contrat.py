@@ -6,7 +6,7 @@ from app.models import Contrat, FicPersonne
 from app.schemas import Contrat as ContratSchema, ContratCreate
 import uuid
 
-router = APIRouter(prefix="/api/contrats", tags=["contrats"])
+router = APIRouter(prefix="/api/contrats", tags=["Contrats"])
 
 @router.get("", response_model=List[ContratSchema])
 async def get_contrats(fic_personne_id: str = None, db: Session = Depends(get_db)):

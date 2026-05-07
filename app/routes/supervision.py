@@ -6,7 +6,7 @@ from app.models import Supervision, FicPersonne
 from app.schemas import Supervision as SupervisionSchema, SupervisionCreate
 import uuid
 
-router = APIRouter(prefix="/api/supervisions", tags=["supervisions"])
+router = APIRouter(prefix="/api/supervisions", tags=["Assignation"])
 
 @router.get("", response_model=List[SupervisionSchema])
 async def get_supervisions(fic_personne_id: str = None, db: Session = Depends(get_db)):

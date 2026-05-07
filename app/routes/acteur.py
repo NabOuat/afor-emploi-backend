@@ -6,7 +6,7 @@ from app.models import Acteur
 from app.schemas import Acteur as ActeurSchema, ActeurCreate
 import uuid
 
-router = APIRouter(prefix="/api/acteurs", tags=["acteurs"])
+router = APIRouter(prefix="/api/acteurs", tags=["Acteurs"])
 
 @router.get("", response_model=List[ActeurSchema])
 async def get_acteurs(type_acteur: str = None, db: Session = Depends(get_db)):
