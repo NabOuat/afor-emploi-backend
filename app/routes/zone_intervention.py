@@ -6,7 +6,7 @@ from app.models import ZoneDIntervention, Acteur, Projet, TRegion
 from app.schemas import ZoneDIntervention as ZoneDInterventionSchema, ZoneDInterventionCreate
 import uuid
 
-router = APIRouter(prefix="/api/zones-intervention", tags=["zones-intervention"])
+router = APIRouter(prefix="/api/zones-intervention", tags=["Assignation"])
 
 @router.get("/full")
 async def get_zones_full(acteur_id: str = None, projet_id: str = None, db: Session = Depends(get_db)):

@@ -6,7 +6,7 @@ from app.models import FicPersonneLocalisation, Contrat
 from app.schemas import FicPersonneLocalisation as FicPersonneLocalisationSchema, FicPersonneLocalisationCreate
 import uuid
 
-router = APIRouter(prefix="/api/localisations", tags=["localisations"])
+router = APIRouter(prefix="/api/localisations", tags=["Localisation"])
 
 @router.get("", response_model=List[FicPersonneLocalisationSchema])
 async def get_localisations(contrat_id: str = None, db: Session = Depends(get_db)):

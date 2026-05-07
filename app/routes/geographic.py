@@ -7,7 +7,7 @@ from app.models import TRegion, TDepartement, TSousPrefecture
 from app.schemas import TRegion as TRegionSchema, TRegionCreate, TDepartement as TDepartementSchema, TDepartementCreate, TSousPrefecture as TSousPrefectureSchema, TSousPrefectureCreate
 import uuid, csv, io
 
-router = APIRouter(prefix="/api/geographic", tags=["geographic"])
+router = APIRouter(prefix="/api/geographic", tags=["Localisation"])
 
 # ============================================
 # REGION ENDPOINTS

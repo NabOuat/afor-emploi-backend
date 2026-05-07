@@ -10,7 +10,7 @@ from io import BytesIO
 import uuid
 from datetime import datetime
 
-router = APIRouter(prefix="/api/import-export", tags=["import-export"])
+router = APIRouter(prefix="/api/import-export", tags=["Import / Export"])
 
 
 @router.get("/download-template")
