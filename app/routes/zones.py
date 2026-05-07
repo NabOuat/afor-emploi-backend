@@ -5,7 +5,7 @@ from app.database import get_db
 from app.models import ZoneDIntervention, TRegion, TDepartement, TSousPrefecture
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/api/zones", tags=["zones"])
+router = APIRouter(prefix="/api/zones", tags=["Assignation"])
 
 class ZoneResponse(BaseModel):
     region_id: str

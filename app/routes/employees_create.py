@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models import FicPersonne, FicPersonneProjet, Projet, Acteur, Contrat, FicPersonneLocalisation
 from app.utils.logger import app_logger, log_employee_creation, log_db_operation, log_error
 import uuid
-router = APIRouter(prefix="/api/employees", tags=["employees"])
+router = APIRouter(prefix="/api/employees", tags=["Employés"])
 
 class ProjetSelection(BaseModel):
     projet_id: str
@@ -36,6 +36,7 @@ class CreateEmployeeRequest(BaseModel):
     projets: list[ProjetSelection] = []
     projet_id: Optional[str] = None
     engagement_id: Optional[str] = None
+    created_by: Optional[str] = None
 
 class CreateEmployeeResponse(BaseModel):
     id: str
@@ -75,7 +76,8 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
             date_naissance=request.date_naissance,
             genre=request.genre,
             contact=request.contact,
-            matricule=request.matricule
+            matricule=request.matricule,
+            created_by=request.created_by
         )
         
         log_db_operation("INSERT", "fic_personne", {
@@ -90,14 +92,15 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
         
         # Créer le contrat associé si des informations sont fournies
         contrat_id = None
-        if request.poste_nom or request.date_debut:
+        effective_poste_nom = request.poste_nom or request.poste
+        if effective_poste_nom and request.date_debut:
             contrat_id = str(uuid.uuid4())
             new_contrat = Contrat(
                 id=contrat_id,
                 fic_personne_id=employee_id,
                 projet_id=request.projet_id,
                 engagement_id=request.engagement_id,
-                poste_nom=request.poste_nom,
+                poste_nom=effective_poste_nom,
                 categorie_poste=request.categorie_poste,
                 type_contrat=request.type_contrat,
                 type_personne=request.type_personne,
@@ -241,24 +244,25 @@ async def update_employee(employee_id: str, request: CreateEmployeeRequest, db: 
         
         # Mettre à jour le contrat
         contrat = db.query(Contrat).filter(Contrat.fic_personne_id == employee_id).first()
+        effective_poste_nom = request.poste_nom or request.poste
         if contrat:
-            contrat.poste_nom = request.poste_nom
+            contrat.poste_nom = effective_poste_nom or contrat.poste_nom
             contrat.categorie_poste = request.categorie_poste
             contrat.type_contrat = request.type_contrat
             contrat.type_personne = request.type_personne
             contrat.poste = request.poste
-            contrat.date_debut = request.date_debut
+            contrat.date_debut = request.date_debut or contrat.date_debut
             contrat.date_fin = request.date_fin
             contrat.diplome = request.diplome
-            contrat.ecole = [request.ecole] if request.ecole else None
+            contrat.ecole = request.ecole
         else:
             # Créer un nouveau contrat si aucun n'existe
-            if request.poste_nom or request.date_debut:
+            if effective_poste_nom and request.date_debut:
                 contrat_id = str(uuid.uuid4())
                 new_contrat = Contrat(
                     id=contrat_id,
                     fic_personne_id=employee_id,
-                    poste_nom=request.poste_nom,
+                    poste_nom=effective_poste_nom,
                     categorie_poste=request.categorie_poste,
                     type_contrat=request.type_contrat,
                     type_personne=request.type_personne,
@@ -266,7 +270,7 @@ async def update_employee(employee_id: str, request: CreateEmployeeRequest, db: 
                     date_debut=request.date_debut,
                     date_fin=request.date_fin,
                     diplome=request.diplome,
-                    ecole=[request.ecole] if request.ecole else None
+                    ecole=request.ecole
                 )
                 db.add(new_contrat)
                 db.flush()

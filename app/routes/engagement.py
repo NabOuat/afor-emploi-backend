@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Engagement, ProjetEngagement, Projet
 
-router = APIRouter(prefix="/api/engagements", tags=["engagements"])
+router = APIRouter(prefix="/api/engagements", tags=["Assignation"])
 
 
 @router.get("/project/{projet_id}")
