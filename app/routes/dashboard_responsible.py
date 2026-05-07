@@ -9,7 +9,7 @@ from app.models import (
     FicPersonneProjet, Projet, TRegion
 )
 
-router = APIRouter(prefix="/api/dashboard/responsible", tags=["dashboard_responsible"])
+router = APIRouter(prefix="/api/dashboard/responsible", tags=["Tableau de bord"])
 
 
 def _base_query(db: Session, acteur_id: str, filter_type: str = "tous"):

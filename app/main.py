@@ -18,10 +18,23 @@ async def lifespan(_app: FastAPI):
     stop_scheduler()
 
 
+openapi_tags = [
+    {"name": "Employés",        "description": "Gestion des employés (fiches personnelles, création, recherche)"},
+    {"name": "Utilisateurs",    "description": "Authentification, comptes utilisateurs et actions"},
+    {"name": "Acteurs",         "description": "Acteurs de la plateforme (opérateurs, AFOR, écoles…)"},
+    {"name": "Contrats",        "description": "Contrats de travail des employés"},
+    {"name": "Assignation",     "description": "Zones d'intervention, engagements et supervisions"},
+    {"name": "Localisation",    "description": "Données géographiques (régions, départements, sous-préfectures) et localisations"},
+    {"name": "Projets",         "description": "Gestion des projets"},
+    {"name": "Tableau de bord", "description": "Statistiques et indicateurs"},
+    {"name": "Import / Export", "description": "Import/export de données (Excel, CSV)"},
+]
+
 app = FastAPI(
-    title="Emploi API",
-    description="API for employment management system",
+    title="AFOR Emploi API",
+    description="Plateforme de gestion du personnel — AGENCE FONCIÈRE RURALE",
     version="1.0.0",
+    openapi_tags=openapi_tags,
     lifespan=lifespan,
 )
 

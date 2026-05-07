@@ -10,7 +10,7 @@ import logging
 import unicodedata
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/employees", tags=["employees"])
+router = APIRouter(prefix="/api/employees", tags=["Employés"])
 
 def normalize_utf8(text):
     """Normalise les caractères UTF-8 mal encodés"""

@@ -4,11 +4,11 @@ from datetime import timedelta
 from app.database import get_db
 from app.models import Users, Acteur
 from app.schemas import LoginRequest, TokenResponse
-from app.security import verify_password, create_access_token, hash_password, require_admin
+from app.security import verify_password, create_access_token, hash_password, require_admin, require_admin_or_afor
 from app.config import settings
 import uuid
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(prefix="/api/auth", tags=["Utilisateurs"])
 
 @router.post("/login", response_model=TokenResponse)
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
@@ -144,7 +144,7 @@ async def send_test_report(data: dict, db: Session = Depends(get_db)):
 
 
 @router.get("/users")
-async def list_users(db: Session = Depends(get_db), _: Users = Depends(require_admin)):
+async def list_users(db: Session = Depends(get_db), _: Users = Depends(require_admin_or_afor)):
     """Liste tous les utilisateurs avec leurs infos acteur."""
     users = db.query(Users).all()
     result = []
@@ -161,6 +161,45 @@ async def list_users(db: Session = Depends(get_db), _: Users = Depends(require_a
             "type_acteur": acteur.type_acteur if acteur else None,
         })
     return result
+
+
+@router.put("/users/{user_id}")
+async def update_user(user_id: str, data: dict, db: Session = Depends(get_db), _: Users = Depends(require_admin_or_afor)):
+    """Mise à jour des informations d'un utilisateur (nom, prénom, email, acteur, mot de passe optionnel)."""
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable")
+
+    if "nom" in data:
+        user.nom = data["nom"] or None
+    if "prenom" in data:
+        user.prenom = data["prenom"] or None
+    if "email" in data:
+        user.email = data["email"] or None
+    if "acteur_id" in data and data["acteur_id"]:
+        acteur = db.query(Acteur).filter(Acteur.id == data["acteur_id"]).first()
+        if not acteur:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Acteur introuvable")
+        user.acteur_id = data["acteur_id"]
+    if "new_password" in data and data["new_password"]:
+        pwd = data["new_password"].strip()
+        if len(pwd) < 8:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mot de passe trop court (8 caractères min)")
+        user.password = hash_password(pwd)
+
+    db.commit()
+    db.refresh(user)
+    acteur = db.query(Acteur).filter(Acteur.id == user.acteur_id).first()
+    return {
+        "id": user.id,
+        "username": user.username,
+        "nom": user.nom,
+        "prenom": user.prenom,
+        "email": user.email,
+        "acteur_id": user.acteur_id,
+        "acteur_nom": acteur.nom if acteur else None,
+        "type_acteur": acteur.type_acteur if acteur else None,
+    }
 
 
 @router.delete("/users/{user_id}")
@@ -216,6 +255,22 @@ async def create_user(data: dict, db: Session = Depends(get_db), _: Users = Depe
         "acteur_nom": acteur.nom,
         "type_acteur": acteur.type_acteur,
     }
+
+
+@router.put("/users/{user_id}/reset-password")
+async def admin_reset_password(user_id: str, data: dict, db: Session = Depends(get_db), _: Users = Depends(require_admin_or_afor)):
+    """Réinitialisation forcée du mot de passe par un admin (sans l'ancien mdp)."""
+    new_password = data.get("new_password", "").strip()
+    if len(new_password) < 8:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mot de passe trop court (8 caractères min)")
+
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable")
+
+    user.password = hash_password(new_password)
+    db.commit()
+    return {"message": f"Mot de passe de « {user.username} » réinitialisé avec succès"}
 
 
 @router.post("/register")

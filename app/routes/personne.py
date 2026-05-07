@@ -6,7 +6,7 @@ from app.models import FicPersonne, Acteur, Projet
 from app.schemas import FicPersonne as FicPersonneSchema, FicPersonneCreate
 import uuid
 
-router = APIRouter(prefix="/api/personnes", tags=["personnes"])
+router = APIRouter(prefix="/api/personnes", tags=["Employés"])
 
 @router.get("", response_model=List[FicPersonneSchema])
 async def get_personnes(db: Session = Depends(get_db)):
