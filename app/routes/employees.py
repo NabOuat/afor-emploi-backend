@@ -4,46 +4,21 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from datetime import date
 from app.database import get_db
-from app.models import FicPersonne, Contrat, FicPersonneLocalisation, FicPersonneProjet, Projet, TRegion, TDepartement, TSousPrefecture, ZoneDIntervention
+from app.models import FicPersonne, Contrat, FicPersonneLocalisation, FicPersonneProjet, Projet, TRegion, TDepartement, TSousPrefecture, ZoneDIntervention, Users
+from app.security import get_current_user
 from typing import List, Optional
 import logging
-import unicodedata
+import ftfy
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/employees", tags=["Employés"])
 
 def normalize_utf8(text):
-    """Normalise les caractères UTF-8 mal encodés"""
     if not text or not isinstance(text, str):
         return text
     try:
-        # Dictionnaire de remplacement pour les caractères mal encodés courants
-        replacements = {
-            '├â┬®': 'é',
-            '├â┬Ç': 'ç',
-            '├â┬Ö': 'è',
-            '├â┬ê': 'ê',
-            '├ô┬ê': 'ô',
-            '├ô┬ç': 'ù',
-            '├â┬ô': 'à',
-            '├â┬ô': 'î',
-            '├â┬ü': 'ü',
-            '├â┬ö': 'ö',
-            '├â┬ô': 'á',
-            '├â┬ö': 'ó',
-            '├â┬ü': 'ú',
-            '├â┬ô': 'í',
-            'N├ó┬Ç┬Ö': 'NGUESSAN',
-            'n├ó┬Ç┬Ö': 'nguessan',
-            '├é┬á': 'é',
-        }
-        
-        result = text
-        for bad, good in replacements.items():
-            result = result.replace(bad, good)
-        
-        return result
-    except:
+        return ftfy.fix_text(text)
+    except Exception:
         return text
 
 class EmployeeDetail:
@@ -66,15 +41,48 @@ class EmployeeDetail:
         self.sous_prefecture_id = localisation.sous_prefecture_id if localisation else None
 
 @router.get("/list/{acteur_id}")
-async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
-    """Récupérer la liste complète des employés avec leurs contrats et localisations"""
-    
+async def get_employees_list(
+    acteur_id: str,
+    page: int = 1,
+    page_size: int = 50,
+    db: Session = Depends(get_db),
+    _: Users = Depends(get_current_user)
+):
+    """Récupérer la liste paginée des employés avec leurs contrats et localisations.
+    Paramètres: page (défaut 1), page_size (défaut 50, max 200).
+    La réponse inclut: items, total, page, page_size, pages.
+    """
+    page = max(1, page)
+    page_size = min(max(1, page_size), 200)
+
     try:
-        logger.info(f"Récupération des employés pour acteur_id: {acteur_id}")
-        
-        # Requête SQL optimisée pour charger tous les données en une seule requête
+        logger.info(f"Récupération des employés pour acteur_id: {acteur_id} page={page} page_size={page_size}")
+
         from sqlalchemy import text
-        
+
+        # Compte total d'employés distincts pour cet acteur
+        count_result = db.execute(text("""
+            SELECT COUNT(DISTINCT fp.id)
+            FROM fic_personne_projet fpp
+            INNER JOIN fic_personne fp ON fpp.fic_personne_id = fp.id
+            WHERE fpp.acteur_id = :acteur_id
+        """), {"acteur_id": acteur_id})
+        total = count_result.scalar() or 0
+
+        # IDs de la page courante
+        ids_result = db.execute(text("""
+            SELECT DISTINCT fp.id
+            FROM fic_personne_projet fpp
+            INNER JOIN fic_personne fp ON fpp.fic_personne_id = fp.id
+            WHERE fpp.acteur_id = :acteur_id
+            ORDER BY fp.id
+            LIMIT :limit OFFSET :offset
+        """), {"acteur_id": acteur_id, "limit": page_size, "offset": (page - 1) * page_size})
+        page_ids = [row[0] for row in ids_result.fetchall()]
+
+        if not page_ids:
+            return {"items": [], "total": total, "page": page, "page_size": page_size, "pages": max(1, -(-total // page_size))}
+
         result = db.execute(text("""
             SELECT DISTINCT
                 fp.id,
@@ -117,10 +125,10 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
             LEFT JOIN tsousprefecture ts ON fpl.sous_prefecture_id = ts.id
             LEFT JOIN projet p ON fpp.projet_id = p.id
             LEFT JOIN users u ON fp.created_by = u.id
-            WHERE fpp.acteur_id = :acteur_id
+            WHERE fpp.acteur_id = :acteur_id AND fp.id = ANY(:ids)
             ORDER BY fp.id, c.date_debut DESC
-        """), {"acteur_id": acteur_id})
-        
+        """), {"acteur_id": acteur_id, "ids": page_ids})
+
         rows = result.fetchall()
         logger.info(f"Nombre de lignes retournées: {len(rows)}")
         
@@ -211,16 +219,16 @@ async def get_employees_list(acteur_id: str, db: Session = Depends(get_db)):
                     })
         
         employees = list(employees_dict.values())
-        
-        logger.info(f"Nombre d'employés retournés: {len(employees)}")
-        return employees
-        
+        pages = max(1, -(-total // page_size))
+        logger.info(f"Employés retournés: {len(employees)} (page {page}/{pages}, total {total})")
+        return {"items": employees, "total": total, "page": page, "page_size": page_size, "pages": pages}
+
     except Exception as e:
         logger.error(f"Erreur dans get_employees_list: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/projects")
-async def get_projects(acteur_id: str, db: Session = Depends(get_db)):
+async def get_projects(acteur_id: str, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Récupérer les projets disponibles pour un acteur via zone_intervention"""
     
     try:
@@ -257,7 +265,7 @@ async def get_projects(acteur_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/acteurs-of-af")
-async def get_of_af_acteurs(db: Session = Depends(get_db)):
+async def get_of_af_acteurs(db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Retourne la liste des acteurs OF et AF (pour filtres responsable)"""
     try:
         from sqlalchemy import text
@@ -274,7 +282,7 @@ async def get_of_af_acteurs(db: Session = Depends(get_db)):
 
 
 @router.get("/projets-all")
-async def get_all_projets(db: Session = Depends(get_db)):
+async def get_all_projets(db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Retourne tous les projets (pour filtres responsable)"""
     try:
         from sqlalchemy import text
@@ -293,9 +301,18 @@ async def get_all_projets(db: Session = Depends(get_db)):
 async def get_all_employees_global(
     filter_acteur_id: Optional[str] = None,
     filter_projet_id: Optional[str] = None,
-    db: Session = Depends(get_db)
+    page: int = 1,
+    page_size: int = 50,
+    db: Session = Depends(get_db),
+    _: Users = Depends(get_current_user)
 ):
-    """Tous les employés des acteurs OF et AF (vue responsable)"""
+    """Tous les employés des acteurs OF et AF (vue responsable), paginés.
+    Paramètres: page (défaut 1), page_size (défaut 50, max 200).
+    La réponse inclut: items, total, page, page_size, pages.
+    """
+    page = max(1, page)
+    page_size = min(max(1, page_size), 200)
+
     try:
         from sqlalchemy import text
 
@@ -311,6 +328,30 @@ async def get_all_employees_global(
             params["filter_projet_id"] = filter_projet_id
 
         where_str = " AND ".join(where_clauses)
+
+        count_result = db.execute(text(f"""
+            SELECT COUNT(DISTINCT fp.id)
+            FROM fic_personne_projet fpp
+            INNER JOIN fic_personne fp ON fpp.fic_personne_id = fp.id
+            INNER JOIN acteur a ON fpp.acteur_id = a.id
+            WHERE {where_str}
+        """), params)
+        total = count_result.scalar() or 0
+
+        ids_result = db.execute(text(f"""
+            SELECT DISTINCT fp.id
+            FROM fic_personne_projet fpp
+            INNER JOIN fic_personne fp ON fpp.fic_personne_id = fp.id
+            INNER JOIN acteur a ON fpp.acteur_id = a.id
+            WHERE {where_str}
+            ORDER BY fp.id
+            LIMIT :limit OFFSET :offset
+        """), {**params, "limit": page_size, "offset": (page - 1) * page_size})
+        page_ids = [row[0] for row in ids_result.fetchall()]
+
+        if not page_ids:
+            pages = max(1, -(-total // page_size))
+            return {"items": [], "total": total, "page": page, "page_size": page_size, "pages": pages}
 
         result = db.execute(text(f"""
             SELECT
@@ -358,9 +399,9 @@ async def get_all_employees_global(
             LEFT JOIN tsousprefecture ts ON fpl.sous_prefecture_id = ts.id
             LEFT JOIN projet p ON fpp.projet_id = p.id
             LEFT JOIN users u ON fp.created_by = u.id
-            WHERE {where_str}
+            WHERE {where_str} AND fp.id = ANY(:ids)
             ORDER BY fp.id, c.date_debut DESC
-        """), params)
+        """), {**params, "ids": page_ids})
 
         rows = result.fetchall()
         employees_dict = {}
@@ -441,8 +482,9 @@ async def get_all_employees_global(
                     })
 
         employees = list(employees_dict.values())
-        logger.info(f"list-all: {len(employees)} employés retournés")
-        return employees
+        pages = max(1, -(-total // page_size))
+        logger.info(f"list-all: {len(employees)} employés retournés (page {page}/{pages}, total {total})")
+        return {"items": employees, "total": total, "page": page, "page_size": page_size, "pages": pages}
 
     except Exception as e:
         logger.error(f"Erreur dans get_all_employees_global: {str(e)}", exc_info=True)

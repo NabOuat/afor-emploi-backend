@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import FicPersonne, Contrat, FicPersonneLocalisation, Acteur, Projet, Engagement, ProjetEngagement
+from app.models import FicPersonne, Contrat, FicPersonneLocalisation, Acteur, Projet, Engagement, ProjetEngagement, Users
+from app.security import get_current_user, require_admin
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from io import BytesIO
@@ -14,15 +15,15 @@ router = APIRouter(prefix="/api/import-export", tags=["Import / Export"])
 
 
 @router.get("/download-template")
-async def download_template():
+async def download_template(_: Users = Depends(get_current_user)):
     """Télécharger le template Excel pour l'import d'employés"""
-    
+
     try:
         # Créer un nouveau classeur
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Employés"
-        
+
         # Définir les colonnes
         headers = [
             "Nom",
@@ -45,7 +46,7 @@ async def download_template():
             "Département",
             "Sous-Préfecture"
         ]
-        
+
         # Ajouter les headers
         for col_num, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col_num)
@@ -53,7 +54,7 @@ async def download_template():
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        
+
         # Ajouter une ligne d'exemple
         example_data = [
             "Dupont",
@@ -76,17 +77,17 @@ async def download_template():
             "Abidjan",
             "Abidjan"
         ]
-        
+
         for col_num, value in enumerate(example_data, 1):
             cell = ws.cell(row=2, column=col_num)
             cell.value = value
             cell.alignment = Alignment(horizontal="left", vertical="center")
-        
+
         # Ajuster les largeurs de colonnes
         column_widths = [15, 15, 20, 10, 20, 20, 15, 20, 20, 18, 15, 20, 15, 20, 20, 20, 15, 15, 20]
         for col_num, width in enumerate(column_widths, 1):
             ws.column_dimensions[openpyxl.utils.get_column_letter(col_num)].width = width
-        
+
         # Ajouter une feuille d'instructions
         instructions_ws = wb.create_sheet("Instructions")
         instructions = [
@@ -123,7 +124,7 @@ async def download_template():
             ["- Département: Département de localisation (optionnel)"],
             ["- Sous-Préfecture: Sous-préfecture de localisation (optionnel)"],
         ]
-        
+
         for row_num, row_data in enumerate(instructions, 1):
             for col_num, value in enumerate(row_data, 1):
                 cell = instructions_ws.cell(row=row_num, column=col_num)
@@ -132,14 +133,14 @@ async def download_template():
                     cell.font = Font(bold=True, size=14)
                     cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
                     cell.font = Font(bold=True, size=14, color="FFFFFF")
-        
+
         instructions_ws.column_dimensions['A'].width = 80
-        
+
         # Sauvegarder dans BytesIO
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-        
+
         return StreamingResponse(
             iter([output.getvalue()]),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -154,31 +155,32 @@ async def import_employees(
     file: UploadFile = File(...),
     acteur_id: str = None,
     projet_id: str = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: Users = Depends(get_current_user)
 ):
     """Importer des employés depuis un fichier Excel"""
-    
+
     try:
         # Lire le fichier Excel
         contents = await file.read()
         wb = openpyxl.load_workbook(BytesIO(contents))
         ws = wb.active
-        
+
         results = {
             "total": 0,
             "success": 0,
             "errors": [],
             "employees": []
         }
-        
+
         # Parcourir les lignes (en commençant par la ligne 2, après les headers)
         for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
             try:
                 if not row[0]:  # Si la première colonne est vide, on arrête
                     break
-                
+
                 results["total"] += 1
-                
+
                 # Extraire les données
                 nom = row[0]
                 prenom = row[1]
@@ -199,7 +201,7 @@ async def import_employees(
                 region = row[16]
                 departement = row[17]
                 sous_prefecture = row[18]
-                
+
                 # Validation basique
                 if not nom or not prenom or not projet_name or not poste_nom or not date_debut:
                     results["errors"].append({
@@ -207,7 +209,7 @@ async def import_employees(
                         "error": "Colonnes obligatoires manquantes (Nom, Prénom, Projet, Poste, Date Début)"
                     })
                     continue
-                
+
                 # Récupérer le projet si spécifié
                 projet_id_to_use = projet_id
                 if projet_name:
@@ -219,7 +221,7 @@ async def import_employees(
                         })
                         continue
                     projet_id_to_use = projet.id
-                
+
                 # Récupérer l'engagement si spécifié
                 engagement_id_to_use = None
                 if engagement_name:
@@ -231,7 +233,7 @@ async def import_employees(
                         })
                         continue
                     engagement_id_to_use = engagement.id
-                
+
                 # Créer l'employé
                 fic_personne_id = str(uuid.uuid4())
                 fic_personne = FicPersonne(
@@ -244,7 +246,7 @@ async def import_employees(
                 )
                 db.add(fic_personne)
                 db.flush()  # Flush pour obtenir l'ID
-                
+
                 # Créer le contrat
                 contrat_id = str(uuid.uuid4())
                 contrat = Contrat(
@@ -264,7 +266,7 @@ async def import_employees(
                 )
                 db.add(contrat)
                 db.flush()  # Flush pour obtenir l'ID
-                
+
                 # Créer la localisation si les données sont fournies
                 if region or departement or sous_prefecture:
                     localisation_id = str(uuid.uuid4())
@@ -276,23 +278,23 @@ async def import_employees(
                         sous_prefecture_id=sous_prefecture
                     )
                     db.add(localisation)
-                
+
                 results["success"] += 1
                 results["employees"].append({
                     "nom": nom,
                     "prenom": prenom,
                     "poste": poste_nom
                 })
-                
+
             except Exception as e:
                 results["errors"].append({
                     "row": row_num,
                     "error": str(e)
                 })
-        
+
         # Commit les changements
         db.commit()
-        
+
         return results
     except Exception as e:
         db.rollback()
@@ -300,16 +302,16 @@ async def import_employees(
 
 
 @router.get("/export-employees")
-async def export_employees(acteur_id: str = None, db: Session = Depends(get_db)):
+async def export_employees(acteur_id: str = None, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Exporter les employés en CSV avec les engagements"""
-    
+
     try:
         import csv
         from io import StringIO
-        
+
         # Créer un StringIO pour le CSV
         output = StringIO()
-        
+
         # Définir les colonnes
         fieldnames = [
             "ID",
@@ -334,10 +336,10 @@ async def export_employees(acteur_id: str = None, db: Session = Depends(get_db))
             "Département",
             "Sous-Préfecture"
         ]
-        
+
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
-        
+
         # Récupérer les employés
         query = db.query(FicPersonne)
         if acteur_id:
@@ -345,22 +347,22 @@ async def export_employees(acteur_id: str = None, db: Session = Depends(get_db))
             employees = db.query(FicPersonne).join(Contrat).all()
         else:
             employees = db.query(FicPersonne).all()
-        
+
         # Écrire les données
         for employee in employees:
             # Récupérer le contrat de l'employé
             contrat = db.query(Contrat).filter(Contrat.fic_personne_id == employee.id).first()
-            
+
             if contrat:
                 # Récupérer le projet
                 projet = db.query(Projet).filter(Projet.id == contrat.projet_id).first() if contrat.projet_id else None
-                
+
                 # Récupérer l'engagement
                 engagement = db.query(Engagement).filter(Engagement.id == contrat.engagement_id).first() if contrat.engagement_id else None
-                
+
                 # Récupérer la localisation
                 localisation = db.query(FicPersonneLocalisation).filter(FicPersonneLocalisation.contrat_id == contrat.id).first()
-                
+
                 writer.writerow({
                     "ID": employee.id,
                     "Nom": employee.nom,
@@ -384,15 +386,15 @@ async def export_employees(acteur_id: str = None, db: Session = Depends(get_db))
                     "Département": localisation.departement_id if localisation else "",
                     "Sous-Préfecture": localisation.sous_prefecture_id if localisation else "",
                 })
-        
+
         # Préparer la réponse
         output.seek(0)
-        
+
         return StreamingResponse(
             iter([output.getvalue()]),
             media_type="text/csv",
             headers={"Content-Disposition": f"attachment; filename=employes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
         )
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

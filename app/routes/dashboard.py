@@ -37,7 +37,7 @@ def _cache_invalidate(acteur_id: str) -> None:
             del _cache[k]
 
 @router.get("/operator/stats/{acteur_id}")
-async def get_operator_stats(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db)):
+async def get_operator_stats(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Récupérer les statistiques du dashboard opérateur
     
     filter_type: 'all' pour tous les employés, 'active' pour employés actifs uniquement
@@ -95,44 +95,24 @@ async def get_operator_stats(acteur_id: str, filter_type: str = "all", db: Sessi
             query = query.filter(FicPersonneProjet.acteur_id == acteur_filter)
         active_contracts = query.scalar() or 0
         
-        # 3. Nombre d'employés de plus de 25 ans (via fic_personne_localisation)
+        # 3. Nombre d'employés de plus de 25 ans — filtré directement en SQL
+        cutoff_date = today.replace(year=today.year - 25)
+        age_q = db.query(func.count(func.distinct(FicPersonne.id))).join(
+            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
+        ).filter(
+            FicPersonne.date_naissance.isnot(None),
+            FicPersonne.date_naissance <= cutoff_date,
+        )
+        if acteur_filter:
+            age_q = age_q.filter(FicPersonneProjet.acteur_id == acteur_filter)
         if filter_type == "active":
-            # Employés actifs avec date de naissance
-            query = db.query(FicPersonne).join(
-                FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
-            ).join(
+            age_q = age_q.join(
                 Contrat, FicPersonne.id == Contrat.fic_personne_id
-            ).join(
-                FicPersonneLocalisation, Contrat.id == FicPersonneLocalisation.contrat_id
             ).filter(
-                FicPersonne.date_naissance.isnot(None),
                 Contrat.date_debut <= today,
                 or_(Contrat.date_fin >= today, Contrat.date_fin.is_(None))
             )
-            if acteur_filter:
-                query = query.filter(FicPersonneProjet.acteur_id == acteur_filter)
-            employees_with_birth = query.distinct().all()
-        else:
-            # Tous les employés avec date de naissance
-            query = db.query(FicPersonne).join(
-                FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
-            ).join(
-                Contrat, FicPersonne.id == Contrat.fic_personne_id
-            ).join(
-                FicPersonneLocalisation, Contrat.id == FicPersonneLocalisation.contrat_id
-            ).filter(
-                FicPersonne.date_naissance.isnot(None)
-            )
-            if acteur_filter:
-                query = query.filter(FicPersonneProjet.acteur_id == acteur_filter)
-            employees_with_birth = query.distinct().all()
-        
-        young_count = 0
-        for emp in employees_with_birth:
-            if emp.date_naissance:
-                age = (today - emp.date_naissance).days // 365
-                if age > 25:
-                    young_count += 1
+        young_count = age_q.scalar() or 0
         
         # 4. Dernière connexion
         query = db.query(UserAction).filter(
@@ -155,7 +135,7 @@ async def get_operator_stats(acteur_id: str, filter_type: str = "all", db: Sessi
 
 
 @router.get("/operator/employees-progression/{acteur_id}")
-async def get_employees_progression(acteur_id: str, months: int = 6, db: Session = Depends(get_db)):
+async def get_employees_progression(acteur_id: str, months: int = 6, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Progression des employés par mois"""
     
     try:
@@ -185,7 +165,7 @@ async def get_employees_progression(acteur_id: str, months: int = 6, db: Session
 
 
 @router.get("/operator/employees-by-zone/{acteur_id}")
-async def get_employees_by_zone(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db)):
+async def get_employees_by_zone(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Nombre d'employés par zone d'intervention via fic_personne_localisation"""
     
     try:
@@ -245,7 +225,7 @@ async def get_employees_by_zone(acteur_id: str, filter_type: str = "all", db: Se
 
 
 @router.get("/operator/employees-by-position/{acteur_id}")
-async def get_employees_by_position(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db)):
+async def get_employees_by_position(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Nombre d'employés par poste"""
     
     try:
@@ -282,7 +262,7 @@ async def get_employees_by_position(acteur_id: str, filter_type: str = "all", db
 
 
 @router.get("/operator/average-contract-duration/{acteur_id}")
-async def get_average_contract_duration(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db)):
+async def get_average_contract_duration(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Durée moyenne des contrats"""
     
     try:
@@ -332,7 +312,7 @@ async def get_average_contract_duration(acteur_id: str, filter_type: str = "all"
 
 
 @router.get("/operator/contract-status/{acteur_id}")
-async def get_contract_status(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db)):
+async def get_contract_status(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Statut des contrats (actifs, terminés, à venir)"""
     
     try:
@@ -391,7 +371,7 @@ async def get_contract_status(acteur_id: str, filter_type: str = "all", db: Sess
 
 
 @router.get("/operator/employees-by-project/{acteur_id}")
-async def get_employees_by_project(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db)):
+async def get_employees_by_project(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Nombre d'employés par projet"""
     
     try:
@@ -434,7 +414,7 @@ async def get_employees_by_project(acteur_id: str, filter_type: str = "all", db:
 
 
 @router.get("/operator/employees-by-gender/{acteur_id}")
-async def get_employees_by_gender(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db)):
+async def get_employees_by_gender(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Répartition des employés par genre"""
     
     try:
@@ -477,7 +457,7 @@ async def get_employees_by_gender(acteur_id: str, filter_type: str = "all", db: 
 
 
 @router.get("/operator/age-statistics/{acteur_id}")
-async def get_age_statistics(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db)):
+async def get_age_statistics(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Statistiques d'âge des employés"""
     
     try:
@@ -539,7 +519,7 @@ async def get_age_statistics(acteur_id: str, filter_type: str = "all", db: Sessi
 
 
 @router.get("/operator/contract-types/{acteur_id}")
-async def get_contract_types(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db)):
+async def get_contract_types(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Répartition par type de contrat (type_contrat)"""
     
     try:
@@ -594,7 +574,7 @@ async def get_contract_types(acteur_id: str, filter_type: str = "all", db: Sessi
 
 
 @router.get("/operator/education-level/{acteur_id}")
-async def get_education_level(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db)):
+async def get_education_level(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Répartition par niveau d'éducation (diplôme)"""
     
     try:
@@ -636,7 +616,7 @@ async def get_education_level(acteur_id: str, filter_type: str = "all", db: Sess
 
 
 @router.get("/operator/contract-renewal-rate/{acteur_id}")
-async def get_contract_renewal_rate(acteur_id: str, db: Session = Depends(get_db)):
+async def get_contract_renewal_rate(acteur_id: str, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Taux de renouvellement des contrats (contrats expirés vs actifs)"""
     
     try:
@@ -675,7 +655,7 @@ async def get_contract_renewal_rate(acteur_id: str, db: Session = Depends(get_db
 
 
 @router.get("/operator/top-schools/{acteur_id}")
-async def get_top_schools(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db)):
+async def get_top_schools(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Top 5 écoles/formations"""
     
     try:
@@ -727,7 +707,7 @@ async def get_top_schools(acteur_id: str, filter_type: str = "all", db: Session 
 
 
 @router.get("/operator/monthly-hires/{acteur_id}")
-async def get_monthly_hires(acteur_id: str, months: int = 12, db: Session = Depends(get_db)):
+async def get_monthly_hires(acteur_id: str, months: int = 12, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Embauches par mois (derniers N mois)"""
 
     try:
@@ -764,7 +744,7 @@ async def get_monthly_hires(acteur_id: str, months: int = 12, db: Session = Depe
 
 
 @router.get("/operator/all/{acteur_id}")
-async def get_operator_dashboard_all(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db)):
+async def get_operator_dashboard_all(acteur_id: str, filter_type: str = "all", db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Toutes les données du dashboard en un seul appel API.
     Réduit 9 requêtes HTTP → 1, élimine le N+1 zones, et utilise un cache mémoire 5 min.
     """
@@ -1026,14 +1006,14 @@ async def get_operator_dashboard_all(acteur_id: str, filter_type: str = "all", d
 
 
 @router.delete("/operator/cache/{acteur_id}")
-async def invalidate_operator_cache(acteur_id: str):
+async def invalidate_operator_cache(acteur_id: str, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Vide le cache backend pour cet acteur (à appeler après un import)."""
     _cache_invalidate(acteur_id)
     return {"ok": True}
 
 
 @router.get("/admin/stats")
-async def get_admin_stats(db: Session = Depends(get_db)):
+async def get_admin_stats(db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Statistiques globales pour le dashboard administrateur"""
     try:
         today = date.today()

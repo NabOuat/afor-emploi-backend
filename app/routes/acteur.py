@@ -2,28 +2,29 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
-from app.models import Acteur
+from app.models import Acteur, Users
 from app.schemas import Acteur as ActeurSchema, ActeurCreate
+from app.security import get_current_user, require_admin
 import uuid
 
 router = APIRouter(prefix="/api/acteurs", tags=["Acteurs"])
 
 @router.get("", response_model=List[ActeurSchema])
-async def get_acteurs(type_acteur: str = None, db: Session = Depends(get_db)):
+async def get_acteurs(type_acteur: str = None, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     query = db.query(Acteur)
     if type_acteur:
         query = query.filter(Acteur.type_acteur == type_acteur)
     return query.all()
 
 @router.get("/{acteur_id}", response_model=ActeurSchema)
-async def get_acteur(acteur_id: str, db: Session = Depends(get_db)):
+async def get_acteur(acteur_id: str, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     acteur = db.query(Acteur).filter(Acteur.id == acteur_id).first()
     if not acteur:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Acteur not found")
     return acteur
 
 @router.post("", response_model=ActeurSchema)
-async def create_acteur(acteur: ActeurCreate, db: Session = Depends(get_db)):
+async def create_acteur(acteur: ActeurCreate, db: Session = Depends(get_db), _: Users = Depends(require_admin)):
     db_acteur = Acteur(
         id=str(uuid.uuid4()),
         nom=acteur.nom,
@@ -41,11 +42,10 @@ async def create_acteur(acteur: ActeurCreate, db: Session = Depends(get_db)):
     return db_acteur
 
 @router.put("/{acteur_id}", response_model=ActeurSchema)
-async def update_acteur(acteur_id: str, acteur: ActeurCreate, db: Session = Depends(get_db)):
+async def update_acteur(acteur_id: str, acteur: ActeurCreate, db: Session = Depends(get_db), _: Users = Depends(require_admin)):
     db_acteur = db.query(Acteur).filter(Acteur.id == acteur_id).first()
     if not db_acteur:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Acteur not found")
-    
     db_acteur.nom = acteur.nom
     db_acteur.type_acteur = acteur.type_acteur
     db_acteur.contact_1 = acteur.contact_1
@@ -54,13 +54,12 @@ async def update_acteur(acteur_id: str, acteur: ActeurCreate, db: Session = Depe
     db_acteur.adresse_2 = acteur.adresse_2
     db_acteur.email_1 = acteur.email_1
     db_acteur.email_2 = acteur.email_2
-    
     db.commit()
     db.refresh(db_acteur)
     return db_acteur
 
 @router.delete("/{acteur_id}")
-async def delete_acteur(acteur_id: str, db: Session = Depends(get_db)):
+async def delete_acteur(acteur_id: str, db: Session = Depends(get_db), _: Users = Depends(require_admin)):
     db_acteur = db.query(Acteur).filter(Acteur.id == acteur_id).first()
     if not db_acteur:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Acteur not found")

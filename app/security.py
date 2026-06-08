@@ -16,18 +16,11 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    import hashlib
     if not hashed_password:
         return False
-    # Vérifier si c'est un hash bcrypt
-    if hashed_password.startswith('$2'):
-        return pwd_context.verify(plain_password, hashed_password)
-    # Vérifier si c'est un hash SHA256 (64 caractères hex)
-    elif len(hashed_password) == 64:
-        return hashlib.sha256(plain_password.encode()).hexdigest() == hashed_password
-    # Sinon, comparaison directe (pour les tests)
-    else:
-        return plain_password == hashed_password
+    if not hashed_password.startswith('$2'):
+        return False
+    return pwd_context.verify(plain_password, hashed_password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()

@@ -6,8 +6,9 @@ from datetime import date, timedelta
 from app.database import get_db
 from app.models import (
     FicPersonne, Contrat, FicPersonneLocalisation,
-    FicPersonneProjet, Projet, TRegion
+    FicPersonneProjet, Projet, TRegion, Users
 )
+from app.security import get_current_user
 
 router = APIRouter(prefix="/api/dashboard/responsible", tags=["Tableau de bord"])
 
@@ -49,7 +50,7 @@ def _calc_age(date_naissance) -> int:
 # ─────────────────────────────────────────────────────────────
 @router.get("/statistics/{acteur_id}")
 async def get_responsible_statistics(
-    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db)
+    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db), _: Users = Depends(get_current_user)
 ):
     """Statistiques RH complètes : effectif, contrats, genre, âge, ratio, durée moyenne."""
     try:
@@ -110,7 +111,7 @@ async def get_responsible_statistics(
 # 2. Contrats arrivant à échéance
 # ─────────────────────────────────────────────────────────────
 @router.get("/contrats-echeance/{acteur_id}")
-async def get_contracts_expiring(acteur_id: str, db: Session = Depends(get_db)):
+async def get_contracts_expiring(acteur_id: str, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Contrats expiriant dans 3 mois, 6 mois et 12 mois."""
     try:
         today = date.today()
@@ -146,7 +147,7 @@ async def get_contracts_expiring(acteur_id: str, db: Session = Depends(get_db)):
 # ─────────────────────────────────────────────────────────────
 @router.get("/effectif-par-region/{acteur_id}")
 async def get_employees_by_region(
-    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db)
+    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db), _: Users = Depends(get_current_user)
 ):
     """Effectif déployé par région géographique."""
     try:
@@ -193,7 +194,7 @@ async def get_employees_by_region(
 # ─────────────────────────────────────────────────────────────
 @router.get("/evolution-effectifs/{acteur_id}")
 async def get_evolution_effectifs(
-    acteur_id: str, months: int = 12, db: Session = Depends(get_db)
+    acteur_id: str, months: int = 12, db: Session = Depends(get_db), _: Users = Depends(get_current_user)
 ):
     """Évolution mensuelle des effectifs actifs sur les N derniers mois."""
     try:
@@ -231,7 +232,7 @@ async def get_evolution_effectifs(
 # ─────────────────────────────────────────────────────────────
 @router.get("/taux-occupation-projets/{acteur_id}")
 async def get_projects_occupation_rate(
-    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db)
+    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db), _: Users = Depends(get_current_user)
 ):
     """Nombre d'employés par projet et taux d'occupation estimé."""
     try:
@@ -277,7 +278,7 @@ async def get_projects_occupation_rate(
 # ─────────────────────────────────────────────────────────────
 @router.get("/genre/{acteur_id}")
 async def get_gender_distribution(
-    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db)
+    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db), _: Users = Depends(get_current_user)
 ):
     """Répartition Hommes / Femmes."""
     try:
@@ -306,7 +307,7 @@ async def get_gender_distribution(
 # ─────────────────────────────────────────────────────────────
 @router.get("/groupes-age/{acteur_id}")
 async def get_age_groups(
-    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db)
+    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db), _: Users = Depends(get_current_user)
 ):
     """Distribution par tranche d'âge."""
     try:
@@ -354,7 +355,7 @@ async def get_age_groups(
 # ─────────────────────────────────────────────────────────────
 @router.get("/types-contrats/{acteur_id}")
 async def get_contract_types(
-    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db)
+    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db), _: Users = Depends(get_current_user)
 ):
     """Répartition CDI / CDD / Consultant."""
     try:
@@ -383,7 +384,7 @@ async def get_contract_types(
 # ─────────────────────────────────────────────────────────────
 @router.get("/niveau-education/{acteur_id}")
 async def get_education_levels(
-    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db)
+    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db), _: Users = Depends(get_current_user)
 ):
     """Répartition par niveau d'éducation (diplôme)."""
     try:
@@ -412,7 +413,7 @@ async def get_education_levels(
 # ─────────────────────────────────────────────────────────────
 @router.get("/employes-par-poste/{acteur_id}")
 async def get_employees_by_position(
-    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db)
+    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db), _: Users = Depends(get_current_user)
 ):
     """Répartition des employés par poste (poste_nom sur Contrat)."""
     try:
@@ -441,7 +442,7 @@ async def get_employees_by_position(
 # ─────────────────────────────────────────────────────────────
 @router.get("/embauches-mensuelles/{acteur_id}")
 async def get_monthly_hires(
-    acteur_id: str, months: int = 12, db: Session = Depends(get_db)
+    acteur_id: str, months: int = 12, db: Session = Depends(get_db), _: Users = Depends(get_current_user)
 ):
     """Embauches par mois sur les N derniers mois."""
     try:
@@ -478,7 +479,7 @@ async def get_monthly_hires(
 # ─────────────────────────────────────────────────────────────
 @router.get("/couverture-geographique/{acteur_id}")
 async def get_geographic_coverage(
-    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db)
+    acteur_id: str, filter_type: str = "tous", db: Session = Depends(get_db), _: Users = Depends(get_current_user)
 ):
     """Couverture géographique par région comparée aux objectifs."""
     try:
@@ -534,7 +535,7 @@ async def get_geographic_coverage(
 # ─────────────────────────────────────────────────────────────
 @router.get("/top-ecoles/{acteur_id}")
 async def get_top_schools(
-    acteur_id: str, limit: int = 10, filter_type: str = "tous", db: Session = Depends(get_db)
+    acteur_id: str, limit: int = 10, filter_type: str = "tous", db: Session = Depends(get_db), _: Users = Depends(get_current_user)
 ):
     """Top N écoles / formations parmi les employés."""
     try:
@@ -575,7 +576,7 @@ async def get_top_schools(
 # 14. Statut des contrats (actifs / expirés / à venir)
 # ─────────────────────────────────────────────────────────────
 @router.get("/statut-contrats/{acteur_id}")
-async def get_contract_status(acteur_id: str, db: Session = Depends(get_db)):
+async def get_contract_status(acteur_id: str, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Répartition contrats actifs / expirés / à venir."""
     try:
         today = date.today()

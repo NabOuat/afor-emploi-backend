@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from app.database import init_db
 from app.config import settings
-from app.routes import auth, geographic, acteur, projet, personne, contrat, supervision, localisation, zone_intervention, user_actions, dashboard, import_export, employees, employees_create, zones, engagement, engagement_liaison, dashboard_responsible
+from app.routes import auth, geographic, acteur, projet, personne, contrat, supervision, localisation, zone_intervention, user_actions, dashboard, import_export, employees, employees_create, zones, engagement, engagement_liaison, dashboard_responsible, admin_tools
 from app.scheduler import start_scheduler, stop_scheduler
 
 
@@ -28,6 +29,7 @@ openapi_tags = [
     {"name": "Projets",         "description": "Gestion des projets"},
     {"name": "Tableau de bord", "description": "Statistiques et indicateurs"},
     {"name": "Import / Export", "description": "Import/export de données (Excel, CSV)"},
+    {"name": "Admin Tools",    "description": "Outils d'administration : inspection BD, correction encodage, export SQL, migration (admin uniquement)"},
 ]
 
 app = FastAPI(
@@ -45,6 +47,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Headers de sécurité sur toutes les réponses ───────────────────────────────
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next) -> Response:
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"]    = "nosniff"
+    response.headers["X-Frame-Options"]           = "DENY"
+    response.headers["Referrer-Policy"]           = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"]        = "geolocation=(), microphone=(), camera=()"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 app.include_router(auth.router)
 app.include_router(geographic.router)
@@ -64,6 +77,7 @@ app.include_router(employees_create.router)
 app.include_router(zones.router)
 app.include_router(engagement.router)
 app.include_router(engagement_liaison.router)
+app.include_router(admin_tools.router)
 
 
 @app.get("/health")

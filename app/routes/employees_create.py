@@ -5,7 +5,8 @@ from pydantic import BaseModel
 from datetime import date
 from typing import Optional
 from app.database import get_db
-from app.models import FicPersonne, FicPersonneProjet, Projet, Acteur, Contrat, FicPersonneLocalisation
+from app.models import FicPersonne, FicPersonneProjet, Projet, Acteur, Contrat, FicPersonneLocalisation, Users
+from app.security import get_current_user, require_admin
 from app.utils.logger import app_logger, log_employee_creation, log_db_operation, log_error
 import uuid
 router = APIRouter(prefix="/api/employees", tags=["Employés"])
@@ -45,9 +46,9 @@ class CreateEmployeeResponse(BaseModel):
     message: str
 
 @router.post("/create", response_model=CreateEmployeeResponse)
-async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Session = Depends(get_db)):
+async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Créer un nouvel employé avec sélection de projets et informations de contrat"""
-    
+
     try:
         # LOG: Données reçues
         employee_data_dict = request.dict()
@@ -57,16 +58,16 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
         app_logger.info(f"  - poste (qualification): {request.poste}")
         app_logger.info(f"  - ecole: {request.ecole}")
         log_employee_creation(employee_data_dict, acteur_id)
-        
+
         # Vérifier que l'acteur existe
         acteur = db.query(Acteur).filter(Acteur.id == acteur_id).first()
         if not acteur:
             raise HTTPException(status_code=404, detail="Acteur non trouvé")
-        
+
         # Vérifier qu'au moins un projet est sélectionné
         if not request.projets or len(request.projets) == 0:
             raise HTTPException(status_code=400, detail="Au moins un projet doit être sélectionné")
-        
+
         # Créer le nouvel employé dans fic_personne (SEULEMENT les colonnes qui existent)
         employee_id = str(uuid.uuid4())
         new_employee = FicPersonne(
@@ -79,17 +80,17 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
             matricule=request.matricule,
             created_by=request.created_by
         )
-        
+
         log_db_operation("INSERT", "fic_personne", {
             "id": employee_id,
             "nom": request.nom,
             "prenom": request.prenom,
             "matricule": request.matricule
         })
-        
+
         db.add(new_employee)
         db.flush()
-        
+
         # Créer le contrat associé si des informations sont fournies
         contrat_id = None
         effective_poste_nom = request.poste_nom or request.poste
@@ -110,7 +111,7 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
                 diplome=request.diplome,
                 ecole=request.ecole
             )
-            
+
             log_db_operation("INSERT", "contrat", {
                 "id": contrat_id,
                 "fic_personne_id": employee_id,
@@ -118,22 +119,22 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
                 "type_contrat": request.type_contrat,
                 "ecole": request.ecole
             })
-            
+
             app_logger.info(f"🔍 AVANT INSERTION DANS LA BD:")
             app_logger.info(f"  - new_contrat.poste_nom: {new_contrat.poste_nom}")
             app_logger.info(f"  - new_contrat.categorie_poste: {new_contrat.categorie_poste}")
             app_logger.info(f"  - new_contrat.poste: {new_contrat.poste}")
             app_logger.info(f"  - new_contrat.ecole: {new_contrat.ecole}")
-            
+
             db.add(new_contrat)
             db.flush()
-            
+
             app_logger.info(f"🔍 APRÈS FLUSH (ce qui sera dans la BD):")
             app_logger.info(f"  - new_contrat.poste_nom: {new_contrat.poste_nom}")
             app_logger.info(f"  - new_contrat.categorie_poste: {new_contrat.categorie_poste}")
             app_logger.info(f"  - new_contrat.poste: {new_contrat.poste}")
             app_logger.info(f"  - new_contrat.ecole: {new_contrat.ecole}")
-        
+
         # Créer la localisation si le contrat existe et des infos de localisation sont fournies
         if contrat_id and (request.region_id or request.departement_id or request.sous_prefecture_id):
             localisation_id = str(uuid.uuid4())
@@ -145,7 +146,7 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
                 sous_prefecture_id=request.sous_prefecture_id,
                 date_debut=request.date_debut
             )
-            
+
             log_db_operation("INSERT", "fic_personne_localisation", {
                 "id": localisation_id,
                 "contrat_id": contrat_id,
@@ -153,9 +154,9 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
                 "departement_id": request.departement_id,
                 "sous_prefecture_id": request.sous_prefecture_id
             })
-            
+
             db.add(new_localisation)
-        
+
         # Ajouter les projets sélectionnés via fic_personne_projet
         for projet_sel in request.projets:
             # Vérifier que le projet existe
@@ -163,7 +164,7 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
             if not projet:
                 app_logger.warning(f"Projet {projet_sel.projet_id} non trouvé")
                 continue
-            
+
             # Créer la relation fic_personne_projet
             relation_id = str(uuid.uuid4())
             relation = FicPersonneProjet(
@@ -172,20 +173,20 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
                 projet_id=projet_sel.projet_id,
                 acteur_id=acteur_id
             )
-            
+
             log_db_operation("INSERT", "fic_personne_projet", {
                 "id": relation_id,
                 "fic_personne_id": employee_id,
                 "projet_id": projet_sel.projet_id,
                 "acteur_id": acteur_id
             })
-            
+
             db.add(relation)
-        
+
         db.commit()
-        
+
         app_logger.info(f"✅ Employé {request.nom} {request.prenom} créé avec succès (ID: {employee_id})")
-        
+
         return CreateEmployeeResponse(
             id=employee_id,
             nom=request.nom,
@@ -199,10 +200,30 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
         log_error("CREATION_EMPLOYEE", str(e), {"acteur_id": acteur_id, "nom": request.nom})
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/projects")
-async def get_projects(acteur_id: str, db: Session = Depends(get_db)):
-    """Récupérer la liste des projets disponibles pour un acteur"""
-    
+@router.delete("/{employee_id}")
+async def delete_employee(employee_id: str, db: Session = Depends(get_db), _: Users = Depends(require_admin)):
+    """Supprimer un employé et toutes ses données associées (contrats, localisations, projets)"""
+    employee = db.query(FicPersonne).filter(FicPersonne.id == employee_id).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employé non trouvé")
+
+    contrats = db.query(Contrat).filter(Contrat.fic_personne_id == employee_id).all()
+    for contrat in contrats:
+        db.query(FicPersonneLocalisation).filter(FicPersonneLocalisation.contrat_id == contrat.id).delete()
+        db.delete(contrat)
+
+    db.query(FicPersonneProjet).filter(FicPersonneProjet.fic_personne_id == employee_id).delete()
+    db.delete(employee)
+    db.commit()
+
+    app_logger.info(f"Employé supprimé: {employee.nom} {employee.prenom} (ID: {employee_id})")
+    return {"message": f"Employé {employee.nom} {employee.prenom} supprimé avec succès"}
+
+
+@router.get("/projects-create")
+async def get_projects(acteur_id: str, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
+    """Récupérer la liste des projets disponibles pour un acteur (via fic_personne_projet)"""
+
     try:
         # Récupérer les projets associés à cet acteur
         projets = db.query(Projet).join(
@@ -210,7 +231,7 @@ async def get_projects(acteur_id: str, db: Session = Depends(get_db)):
         ).filter(
             FicPersonneProjet.acteur_id == acteur_id
         ).distinct().all()
-        
+
         result = []
         for projet in projets:
             result.append({
@@ -218,22 +239,22 @@ async def get_projects(acteur_id: str, db: Session = Depends(get_db)):
                 "nom": projet.nom,
                 "nom_complet": projet.nom_complet
             })
-        
+
         return result
     except Exception as e:
         app_logger.error(f"Erreur lors de la récupération des projets: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/update/{employee_id}")
-async def update_employee(employee_id: str, request: CreateEmployeeRequest, db: Session = Depends(get_db)):
+async def update_employee(employee_id: str, request: CreateEmployeeRequest, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Mettre à jour un employé existant"""
-    
+
     try:
         # Vérifier que l'employé existe
         employee = db.query(FicPersonne).filter(FicPersonne.id == employee_id).first()
         if not employee:
             raise HTTPException(status_code=404, detail="Employé non trouvé")
-        
+
         # Mettre à jour les informations de base dans fic_personne
         employee.nom = request.nom
         employee.prenom = request.prenom
@@ -241,7 +262,7 @@ async def update_employee(employee_id: str, request: CreateEmployeeRequest, db: 
         employee.genre = request.genre
         employee.contact = request.contact
         employee.matricule = request.matricule
-        
+
         # Mettre à jour le contrat
         contrat = db.query(Contrat).filter(Contrat.fic_personne_id == employee_id).first()
         effective_poste_nom = request.poste_nom or request.poste
@@ -275,13 +296,13 @@ async def update_employee(employee_id: str, request: CreateEmployeeRequest, db: 
                 db.add(new_contrat)
                 db.flush()
                 contrat = new_contrat
-        
+
         # Mettre à jour la localisation si elle existe
         if contrat and (request.region_id or request.departement_id or request.sous_prefecture_id):
             localisation = db.query(FicPersonneLocalisation).filter(
                 FicPersonneLocalisation.contrat_id == contrat.id
             ).first()
-            
+
             if localisation:
                 localisation.region_id = request.region_id
                 localisation.departement_id = request.departement_id
@@ -299,19 +320,22 @@ async def update_employee(employee_id: str, request: CreateEmployeeRequest, db: 
                     date_debut=request.date_debut
                 )
                 db.add(new_localisation)
-        
+
         db.commit()
         db.refresh(employee)
-        
+
         app_logger.info(f"Employé mis à jour: {employee.nom} {employee.prenom}")
-        
+
         return {
             "id": employee_id,
             "nom": request.nom,
             "prenom": request.prenom,
             "message": "Employé mis à jour avec succès"
         }
-        
+
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         app_logger.error(f"Erreur lors de la mise à jour de l'employé: {e}")

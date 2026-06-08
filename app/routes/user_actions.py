@@ -5,7 +5,7 @@ from typing import List
 from app.database import get_db
 from app.models import UserAction, Users
 from app.schemas import UserActionCreate, UserActionResponse
-from app.security import get_current_user
+from app.security import get_current_user, require_admin
 import uuid
 
 router = APIRouter(prefix="/api/user-actions", tags=["Utilisateurs"])
@@ -14,7 +14,8 @@ router = APIRouter(prefix="/api/user-actions", tags=["Utilisateurs"])
 async def log_user_action(
     action: UserActionCreate,
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: Users = Depends(get_current_user)
 ):
     """Enregistrer une action utilisateur"""
     try:
@@ -43,80 +44,84 @@ async def log_user_action(
 async def get_user_actions(
     user_id: str,
     days: int = 7,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: Users = Depends(get_current_user)
 ):
     """Récupérer les actions d'un utilisateur des N derniers jours"""
     start_date = datetime.utcnow() - timedelta(days=days)
-    
+
     actions = db.query(UserAction).filter(
         UserAction.user_id == user_id,
         UserAction.created_at >= start_date
     ).order_by(UserAction.created_at.desc()).all()
-    
+
     return actions
 
 @router.get("/acteur/{acteur_id}", response_model=List[UserActionResponse])
 async def get_acteur_actions(
     acteur_id: str,
     days: int = 7,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: Users = Depends(get_current_user)
 ):
     """Récupérer toutes les actions d'un acteur des N derniers jours"""
     start_date = datetime.utcnow() - timedelta(days=days)
-    
+
     actions = db.query(UserAction).filter(
         UserAction.acteur_id == acteur_id,
         UserAction.created_at >= start_date
     ).order_by(UserAction.created_at.desc()).all()
-    
+
     return actions
 
 @router.get("/all", response_model=List[UserActionResponse])
 async def get_all_actions(
     days: int = 7,
     action_type: str = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: Users = Depends(get_current_user)
 ):
     """Récupérer toutes les actions des N derniers jours"""
     start_date = datetime.utcnow() - timedelta(days=days)
-    
+
     query = db.query(UserAction).filter(
         UserAction.created_at >= start_date
     )
-    
+
     if action_type:
         query = query.filter(UserAction.action_type == action_type)
-    
+
     actions = query.order_by(UserAction.created_at.desc()).all()
-    
+
     return actions
 
 @router.get("/stats/{acteur_id}")
 async def get_acteur_stats(
     acteur_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: Users = Depends(get_current_user)
 ):
     """Récupérer les statistiques d'activité d'un acteur"""
     today = datetime.utcnow().date()
-    
+
     total_actions = db.query(UserAction).filter(
         UserAction.acteur_id == acteur_id
     ).count()
-    
+
     today_actions = db.query(UserAction).filter(
         UserAction.acteur_id == acteur_id,
         UserAction.created_at >= datetime.combine(today, datetime.min.time())
     ).count()
-    
+
     action_types = db.query(UserAction.action_type, db.func.count(UserAction.id)).filter(
         UserAction.acteur_id == acteur_id
     ).group_by(UserAction.action_type).all()
-    
+
     last_login = db.query(UserAction).filter(
         UserAction.acteur_id == acteur_id,
         UserAction.action_type == "LOGIN"
     ).order_by(UserAction.created_at.desc()).first()
-    
+
     return {
         "total_actions": total_actions,
         "today_actions": today_actions,

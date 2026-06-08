@@ -2,32 +2,33 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
-from app.models import Contrat, FicPersonne
+from app.models import Contrat, FicPersonne, Users
 from app.schemas import Contrat as ContratSchema, ContratCreate
+from app.security import get_current_user, require_admin
 import uuid
 
 router = APIRouter(prefix="/api/contrats", tags=["Contrats"])
 
 @router.get("", response_model=List[ContratSchema])
-async def get_contrats(fic_personne_id: str = None, db: Session = Depends(get_db)):
+async def get_contrats(fic_personne_id: str = None, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     query = db.query(Contrat)
     if fic_personne_id:
         query = query.filter(Contrat.fic_personne_id == fic_personne_id)
     return query.all()
 
 @router.get("/{contrat_id}", response_model=ContratSchema)
-async def get_contrat(contrat_id: str, db: Session = Depends(get_db)):
+async def get_contrat(contrat_id: str, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     contrat = db.query(Contrat).filter(Contrat.id == contrat_id).first()
     if not contrat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contrat not found")
     return contrat
 
 @router.post("", response_model=ContratSchema)
-async def create_contrat(contrat: ContratCreate, db: Session = Depends(get_db)):
+async def create_contrat(contrat: ContratCreate, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     personne = db.query(FicPersonne).filter(FicPersonne.id == contrat.fic_personne_id).first()
     if not personne:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Personne not found")
-    
+
     db_contrat = Contrat(
         id=str(uuid.uuid4()),
         fic_personne_id=contrat.fic_personne_id,
@@ -47,15 +48,15 @@ async def create_contrat(contrat: ContratCreate, db: Session = Depends(get_db)):
     return db_contrat
 
 @router.put("/{contrat_id}", response_model=ContratSchema)
-async def update_contrat(contrat_id: str, contrat: ContratCreate, projet_id: str = None, engagement_id: str = None, db: Session = Depends(get_db)):
+async def update_contrat(contrat_id: str, contrat: ContratCreate, projet_id: str = None, engagement_id: str = None, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     db_contrat = db.query(Contrat).filter(Contrat.id == contrat_id).first()
     if not db_contrat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contrat not found")
-    
+
     personne = db.query(FicPersonne).filter(FicPersonne.id == contrat.fic_personne_id).first()
     if not personne:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Personne not found")
-    
+
     db_contrat.fic_personne_id = contrat.fic_personne_id
     db_contrat.poste_nom = contrat.poste_nom
     db_contrat.categorie_poste = contrat.categorie_poste
@@ -68,13 +69,13 @@ async def update_contrat(contrat_id: str, contrat: ContratCreate, projet_id: str
     db_contrat.ecole = contrat.ecole
     db_contrat.projet_id = projet_id
     db_contrat.engagement_id = engagement_id
-    
+
     db.commit()
     db.refresh(db_contrat)
     return db_contrat
 
 @router.delete("/{contrat_id}")
-async def delete_contrat(contrat_id: str, db: Session = Depends(get_db)):
+async def delete_contrat(contrat_id: str, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     db_contrat = db.query(Contrat).filter(Contrat.id == contrat_id).first()
     if not db_contrat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contrat not found")
@@ -83,17 +84,17 @@ async def delete_contrat(contrat_id: str, db: Session = Depends(get_db)):
     return {"message": "Contrat deleted"}
 
 @router.post("/renew/{employee_id}")
-async def renew_contract(employee_id: str, contrat: ContratCreate, projet_id: str = None, engagement_id: str = None, db: Session = Depends(get_db)):
+async def renew_contract(employee_id: str, contrat: ContratCreate, projet_id: str = None, engagement_id: str = None, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
     """Reconduire le contrat d'un employé en créant un nouveau contrat"""
-    
+
     print(f"DEBUG: Données reçues - contrat: {contrat}")
     print(f"DEBUG: projet_id: {projet_id}, engagement_id: {engagement_id}")
-    
+
     # Vérifier que l'employé existe
     personne = db.query(FicPersonne).filter(FicPersonne.id == employee_id).first()
     if not personne:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employé non trouvé")
-    
+
     # Créer toujours un nouveau contrat lors de la reconduction
     db_contrat = Contrat(
         id=str(uuid.uuid4()),
