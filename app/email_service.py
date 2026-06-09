@@ -41,13 +41,12 @@ def compute_weekly_stats(db: Session) -> dict:
                          AND (c.date_fin IS NULL OR c.date_fin >= CURRENT_DATE)
                     THEN TRUE ELSE FALSE
                 END AS is_active
-            FROM fic_personne_projet fpp
-            INNER JOIN fic_personne fp  ON fpp.fic_personne_id = fp.id
-            INNER JOIN acteur a          ON fpp.acteur_id       = a.id
+            FROM fic_personne fp
+            INNER JOIN acteur a          ON fp.acteur_id        = a.id
             LEFT  JOIN contrat c         ON c.fic_personne_id   = fp.id
             LEFT  JOIN fic_personne_localisation l ON l.contrat_id = c.id
             LEFT  JOIN tregion r         ON r.id                = l.region_id
-            LEFT  JOIN projet p          ON p.id                = fpp.projet_id
+            LEFT  JOIN projet p          ON p.id                = c.projet_id
             WHERE a.type_acteur IN ('OF', 'AF')
             ORDER BY fp.id, c.date_debut DESC
         """))

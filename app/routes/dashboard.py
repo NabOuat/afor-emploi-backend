@@ -7,7 +7,7 @@ import time
 import threading
 from typing import Any, Dict, Optional, Tuple
 from app.database import get_db
-from app.models import FicPersonne, Contrat, Acteur, Users, ZoneDIntervention, UserAction, FicPersonneLocalisation, Projet, FicPersonneProjet, TRegion, TDepartement
+from app.models import FicPersonne, Contrat, Acteur, Users, ZoneDIntervention, UserAction, FicPersonneLocalisation, Projet, TRegion, TDepartement
 from app.security import get_current_user
 
 router = APIRouter(prefix="/api/dashboard", tags=["Tableau de bord"])
@@ -54,28 +54,24 @@ async def get_operator_stats(acteur_id: str, filter_type: str = "all", db: Sessi
             acteur_filter = acteur_id
         
         # Déterminer le filtre à appliquer
-        # Récupérer les employés via fic_personne_projet (nouvelle structure many-to-many)
+        # L'acteur d'un employé est désormais porté par fic_personne.acteur_id
         if filter_type == "active":
             # Filtrer seulement les employés avec contrats actifs
             query = db.query(FicPersonne.id).join(
-                FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
-            ).join(
                 Contrat, FicPersonne.id == Contrat.fic_personne_id
             ).filter(
                 Contrat.date_debut <= today,
                 or_(Contrat.date_fin >= today, Contrat.date_fin.is_(None))
             )
             if acteur_filter:
-                query = query.filter(FicPersonneProjet.acteur_id == acteur_filter)
+                query = query.filter(FicPersonne.acteur_id == acteur_filter)
             employee_ids = query.distinct().all()
             employee_ids = [e[0] for e in employee_ids]
         else:
             # Tous les employés
-            query = db.query(FicPersonne.id).join(
-                FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
-            )
+            query = db.query(FicPersonne.id)
             if acteur_filter:
-                query = query.filter(FicPersonneProjet.acteur_id == acteur_filter)
+                query = query.filter(FicPersonne.acteur_id == acteur_filter)
             employee_ids = query.distinct().all()
             employee_ids = [e[0] for e in employee_ids]
         
@@ -84,27 +80,23 @@ async def get_operator_stats(acteur_id: str, filter_type: str = "all", db: Sessi
         
         # 2. Nombre d'employés avec contrat actif
         query = db.query(func.count(FicPersonne.id)).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
-        ).join(
             Contrat, FicPersonne.id == Contrat.fic_personne_id
         ).filter(
             Contrat.date_debut <= today,
             or_(Contrat.date_fin >= today, Contrat.date_fin.is_(None))
         )
         if acteur_filter:
-            query = query.filter(FicPersonneProjet.acteur_id == acteur_filter)
+            query = query.filter(FicPersonne.acteur_id == acteur_filter)
         active_contracts = query.scalar() or 0
         
         # 3. Nombre d'employés de plus de 25 ans — filtré directement en SQL
         cutoff_date = today.replace(year=today.year - 25)
-        age_q = db.query(func.count(func.distinct(FicPersonne.id))).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
-        ).filter(
+        age_q = db.query(func.count(func.distinct(FicPersonne.id))).filter(
             FicPersonne.date_naissance.isnot(None),
             FicPersonne.date_naissance <= cutoff_date,
         )
         if acteur_filter:
-            age_q = age_q.filter(FicPersonneProjet.acteur_id == acteur_filter)
+            age_q = age_q.filter(FicPersonne.acteur_id == acteur_filter)
         if filter_type == "active":
             age_q = age_q.join(
                 Contrat, FicPersonne.id == Contrat.fic_personne_id
@@ -147,10 +139,8 @@ async def get_employees_progression(acteur_id: str, months: int = 6, db: Session
             month_end = month_start.replace(day=28) + timedelta(days=4)
             month_end = month_end.replace(day=1) - timedelta(days=1)
             
-            count = db.query(func.count(FicPersonne.id)).join(
-                FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
-            ).filter(
-                FicPersonneProjet.acteur_id == acteur_id
+            count = db.query(func.count(FicPersonne.id)).filter(
+                FicPersonne.acteur_id == acteur_id
             ).scalar() or 0
             
             progression.append({
@@ -180,10 +170,8 @@ async def get_employees_by_zone(acteur_id: str, filter_type: str = "all", db: Se
             Contrat, Contrat.id == FicPersonneLocalisation.contrat_id
         ).join(
             FicPersonne, FicPersonne.id == Contrat.fic_personne_id
-        ).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
         ).filter(
-            FicPersonneProjet.acteur_id == acteur_id
+            FicPersonne.acteur_id == acteur_id
         )
         
         if filter_type == "active":
@@ -235,10 +223,8 @@ async def get_employees_by_position(acteur_id: str, filter_type: str = "all", db
             func.count(FicPersonne.id).label("count")
         ).join(
             FicPersonne, FicPersonne.id == Contrat.fic_personne_id
-        ).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
         ).filter(
-            FicPersonneProjet.acteur_id == acteur_id
+            FicPersonne.acteur_id == acteur_id
         )
         
         if filter_type == "active":
@@ -269,10 +255,8 @@ async def get_average_contract_duration(acteur_id: str, filter_type: str = "all"
         today = date.today()
         query = db.query(Contrat).join(
             FicPersonne, FicPersonne.id == Contrat.fic_personne_id
-        ).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
         ).filter(
-            FicPersonneProjet.acteur_id == acteur_id,
+            FicPersonne.acteur_id == acteur_id,
             Contrat.date_debut.isnot(None)
         )
         
@@ -322,10 +306,8 @@ async def get_contract_status(acteur_id: str, filter_type: str = "all", db: Sess
             # Pour le filtre actif, on compte seulement les contrats actifs
             active = db.query(func.count(FicPersonne.id)).join(
                 Contrat, FicPersonne.id == Contrat.fic_personne_id
-            ).join(
-                FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
             ).filter(
-                FicPersonneProjet.acteur_id == acteur_id,
+                FicPersonne.acteur_id == acteur_id,
                 Contrat.date_debut <= today,
                 or_(Contrat.date_fin >= today, Contrat.date_fin.is_(None))
             ).scalar() or 0
@@ -335,29 +317,23 @@ async def get_contract_status(acteur_id: str, filter_type: str = "all", db: Sess
             # Pour tous les employés
             active = db.query(func.count(FicPersonne.id)).join(
                 Contrat, FicPersonne.id == Contrat.fic_personne_id
-            ).join(
-                FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
             ).filter(
-                FicPersonneProjet.acteur_id == acteur_id,
+                FicPersonne.acteur_id == acteur_id,
                 Contrat.date_debut <= today,
                 or_(Contrat.date_fin >= today, Contrat.date_fin.is_(None))
             ).scalar() or 0
             
             completed = db.query(func.count(FicPersonne.id)).join(
                 Contrat, FicPersonne.id == Contrat.fic_personne_id
-            ).join(
-                FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
             ).filter(
-                FicPersonneProjet.acteur_id == acteur_id,
+                FicPersonne.acteur_id == acteur_id,
                 Contrat.date_fin < today
             ).scalar() or 0
             
             upcoming = db.query(func.count(FicPersonne.id)).join(
                 Contrat, FicPersonne.id == Contrat.fic_personne_id
-            ).join(
-                FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
             ).filter(
-                FicPersonneProjet.acteur_id == acteur_id,
+                FicPersonne.acteur_id == acteur_id,
                 Contrat.date_debut > today
             ).scalar() or 0
         
@@ -376,22 +352,21 @@ async def get_employees_by_project(acteur_id: str, filter_type: str = "all", db:
     
     try:
         today = date.today()
+        # Le projet d'un employé est porté par son contrat (contrat.projet_id)
         query = db.query(
             Projet.id,
             Projet.nom,
-            func.count(FicPersonne.id).label("count")
+            func.count(func.distinct(FicPersonne.id)).label("count")
         ).join(
-            FicPersonneProjet, Projet.id == FicPersonneProjet.projet_id
+            Contrat, Projet.id == Contrat.projet_id
         ).join(
-            FicPersonne, FicPersonne.id == FicPersonneProjet.fic_personne_id
+            FicPersonne, FicPersonne.id == Contrat.fic_personne_id
         ).filter(
-            FicPersonneProjet.acteur_id == acteur_id
+            FicPersonne.acteur_id == acteur_id
         )
-        
+
         if filter_type == "active":
-            query = query.join(
-                Contrat, FicPersonne.id == Contrat.fic_personne_id
-            ).filter(
+            query = query.filter(
                 Contrat.date_debut <= today,
                 or_(Contrat.date_fin >= today, Contrat.date_fin.is_(None))
             )
@@ -422,10 +397,8 @@ async def get_employees_by_gender(acteur_id: str, filter_type: str = "all", db: 
         query = db.query(
             FicPersonne.genre,
             func.count(FicPersonne.id).label("count")
-        ).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
         ).filter(
-            FicPersonneProjet.acteur_id == acteur_id
+            FicPersonne.acteur_id == acteur_id
         )
         
         if filter_type == "active":
@@ -462,10 +435,8 @@ async def get_age_statistics(acteur_id: str, filter_type: str = "all", db: Sessi
     
     try:
         today = date.today()
-        query = db.query(FicPersonne).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
-        ).filter(
-            FicPersonneProjet.acteur_id == acteur_id,
+        query = db.query(FicPersonne).filter(
+            FicPersonne.acteur_id == acteur_id,
             FicPersonne.date_naissance.isnot(None)
         )
         
@@ -536,12 +507,10 @@ async def get_contract_types(acteur_id: str, filter_type: str = "all", db: Sessi
             func.count(FicPersonne.id).label("count")
         ).join(
             FicPersonne, FicPersonne.id == Contrat.fic_personne_id
-        ).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
         )
         
         if acteur_filter:
-            query = query.filter(FicPersonneProjet.acteur_id == acteur_filter)
+            query = query.filter(FicPersonne.acteur_id == acteur_filter)
         
         if filter_type == "active":
             query = query.filter(
@@ -584,10 +553,8 @@ async def get_education_level(acteur_id: str, filter_type: str = "all", db: Sess
             func.count(FicPersonne.id).label("count")
         ).join(
             FicPersonne, FicPersonne.id == Contrat.fic_personne_id
-        ).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
         ).filter(
-            FicPersonneProjet.acteur_id == acteur_id
+            FicPersonne.acteur_id == acteur_id
         )
         
         if filter_type == "active":
@@ -624,20 +591,16 @@ async def get_contract_renewal_rate(acteur_id: str, db: Session = Depends(get_db
         
         active = db.query(func.count(Contrat.id)).join(
             FicPersonne, FicPersonne.id == Contrat.fic_personne_id
-        ).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
         ).filter(
-            FicPersonneProjet.acteur_id == acteur_id,
+            FicPersonne.acteur_id == acteur_id,
             Contrat.date_debut <= today,
             or_(Contrat.date_fin >= today, Contrat.date_fin.is_(None))
         ).scalar() or 0
         
         expired = db.query(func.count(Contrat.id)).join(
             FicPersonne, FicPersonne.id == Contrat.fic_personne_id
-        ).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
         ).filter(
-            FicPersonneProjet.acteur_id == acteur_id,
+            FicPersonne.acteur_id == acteur_id,
             Contrat.date_fin < today
         ).scalar() or 0
         
@@ -672,10 +635,8 @@ async def get_top_schools(acteur_id: str, filter_type: str = "all", db: Session 
             func.count(FicPersonne.id).label("count")
         ).join(
             FicPersonne, FicPersonne.id == Contrat.fic_personne_id
-        ).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
         ).filter(
-            FicPersonneProjet.acteur_id == acteur_id,
+            FicPersonne.acteur_id == acteur_id,
             Contrat.ecole.isnot(None)
         )
         
@@ -714,20 +675,23 @@ async def get_monthly_hires(acteur_id: str, months: int = 12, db: Session = Depe
         today = date.today()
         start_date = today - timedelta(days=30 * months)
 
+        # Réutiliser la MÊME expression dans SELECT/GROUP BY/ORDER BY : sous
+        # psycopg3 le littéral 'month' devient un paramètre bind ; trois appels
+        # distincts produisent trois paramètres que Postgres ne peut pas
+        # apparier (GroupingError sur contrat.date_debut).
+        month_expr = func.date_trunc('month', Contrat.date_debut)
         hires = db.query(
-            func.date_trunc('month', Contrat.date_debut).label('month'),
+            month_expr.label('month'),
             func.count(Contrat.id).label('count')
         ).join(
             FicPersonne, FicPersonne.id == Contrat.fic_personne_id
-        ).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
         ).filter(
-            FicPersonneProjet.acteur_id == acteur_id,
+            FicPersonne.acteur_id == acteur_id,
             Contrat.date_debut >= start_date
         ).group_by(
-            func.date_trunc('month', Contrat.date_debut)
+            month_expr
         ).order_by(
-            func.date_trunc('month', Contrat.date_debut)
+            month_expr
         ).all()
 
         result = []
@@ -761,11 +725,9 @@ async def get_operator_dashboard_all(acteur_id: str, filter_type: str = "all", d
         is_active = filter_type == "active"
 
         # ── 1. Nombre total d'employés ──────────────────────────────────────
-        emp_q = db.query(FicPersonne.id).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
-        )
+        emp_q = db.query(FicPersonne.id)
         if acteur_filter:
-            emp_q = emp_q.filter(FicPersonneProjet.acteur_id == acteur_filter)
+            emp_q = emp_q.filter(FicPersonne.acteur_id == acteur_filter)
         if is_active:
             emp_q = emp_q.join(
                 Contrat, FicPersonne.id == Contrat.fic_personne_id
@@ -777,23 +739,19 @@ async def get_operator_dashboard_all(acteur_id: str, filter_type: str = "all", d
 
         # ── 2. Contrats actifs ──────────────────────────────────────────────
         ac_q = db.query(func.count(func.distinct(FicPersonne.id))).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
-        ).join(
             Contrat, FicPersonne.id == Contrat.fic_personne_id
         ).filter(
             Contrat.date_debut <= today,
             or_(Contrat.date_fin >= today, Contrat.date_fin.is_(None))
         )
         if acteur_filter:
-            ac_q = ac_q.filter(FicPersonneProjet.acteur_id == acteur_filter)
+            ac_q = ac_q.filter(FicPersonne.acteur_id == acteur_filter)
         active_contracts = ac_q.scalar() or 0
 
         # ── 3. Dates de naissance (réutilisées pour >25 ans ET tranches d'âge) ─
-        bd_q = db.query(FicPersonne.date_naissance).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
-        ).filter(FicPersonne.date_naissance.isnot(None))
+        bd_q = db.query(FicPersonne.date_naissance).filter(FicPersonne.date_naissance.isnot(None))
         if acteur_filter:
-            bd_q = bd_q.filter(FicPersonneProjet.acteur_id == acteur_filter)
+            bd_q = bd_q.filter(FicPersonne.acteur_id == acteur_filter)
         if is_active:
             bd_q = bd_q.join(
                 Contrat, FicPersonne.id == Contrat.fic_personne_id
@@ -816,9 +774,9 @@ async def get_operator_dashboard_all(acteur_id: str, filter_type: str = "all", d
             Contrat.poste_nom,
             func.count(FicPersonne.id).label("count")
         ).join(FicPersonne, FicPersonne.id == Contrat.fic_personne_id
-        ).join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id)
+        )
         if acteur_filter:
-            pos_q = pos_q.filter(FicPersonneProjet.acteur_id == acteur_filter)
+            pos_q = pos_q.filter(FicPersonne.acteur_id == acteur_filter)
         if is_active:
             pos_q = pos_q.filter(
                 Contrat.date_debut <= today,
@@ -837,11 +795,10 @@ async def get_operator_dashboard_all(acteur_id: str, filter_type: str = "all", d
         ).select_from(FicPersonneLocalisation
         ).join(Contrat, Contrat.id == FicPersonneLocalisation.contrat_id
         ).join(FicPersonne, FicPersonne.id == Contrat.fic_personne_id
-        ).join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
         ).outerjoin(TRegion, TRegion.id == FicPersonneLocalisation.region_id
         ).outerjoin(TDepartement, TDepartement.id == FicPersonneLocalisation.departement_id)
         if acteur_filter:
-            zone_q = zone_q.filter(FicPersonneProjet.acteur_id == acteur_filter)
+            zone_q = zone_q.filter(FicPersonne.acteur_id == acteur_filter)
         if is_active:
             zone_q = zone_q.filter(
                 Contrat.date_debut <= today,
@@ -860,9 +817,9 @@ async def get_operator_dashboard_all(acteur_id: str, filter_type: str = "all", d
             def _contract_count(extra_filter):
                 q = db.query(func.count(func.distinct(FicPersonne.id))).join(
                     Contrat, FicPersonne.id == Contrat.fic_personne_id
-                ).join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id)
+                )
                 if acteur_filter:
-                    q = q.filter(FicPersonneProjet.acteur_id == acteur_filter)
+                    q = q.filter(FicPersonne.acteur_id == acteur_filter)
                 return q.filter(extra_filter).scalar() or 0
 
             cs_completed = _contract_count(Contrat.date_fin < today)
@@ -871,10 +828,9 @@ async def get_operator_dashboard_all(acteur_id: str, filter_type: str = "all", d
         # ── 8. Durée moyenne des contrats ───────────────────────────────────
         dur_q = db.query(Contrat.date_debut, Contrat.date_fin).join(
             FicPersonne, FicPersonne.id == Contrat.fic_personne_id
-        ).join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
         ).filter(Contrat.date_debut.isnot(None))
         if acteur_filter:
-            dur_q = dur_q.filter(FicPersonneProjet.acteur_id == acteur_filter)
+            dur_q = dur_q.filter(FicPersonne.acteur_id == acteur_filter)
         if is_active:
             dur_q = dur_q.filter(
                 Contrat.date_debut <= today,
@@ -895,14 +851,12 @@ async def get_operator_dashboard_all(acteur_id: str, filter_type: str = "all", d
             Projet.id,
             Projet.nom,
             func.count(func.distinct(FicPersonne.id)).label("count")
-        ).join(FicPersonneProjet, Projet.id == FicPersonneProjet.projet_id
-        ).join(FicPersonne, FicPersonne.id == FicPersonneProjet.fic_personne_id)
+        ).join(Contrat, Projet.id == Contrat.projet_id
+        ).join(FicPersonne, FicPersonne.id == Contrat.fic_personne_id)
         if acteur_filter:
-            proj_q = proj_q.filter(FicPersonneProjet.acteur_id == acteur_filter)
+            proj_q = proj_q.filter(FicPersonne.acteur_id == acteur_filter)
         if is_active:
-            proj_q = proj_q.join(
-                Contrat, FicPersonne.id == Contrat.fic_personne_id
-            ).filter(
+            proj_q = proj_q.filter(
                 Contrat.date_debut <= today,
                 or_(Contrat.date_fin >= today, Contrat.date_fin.is_(None))
             )
@@ -915,9 +869,9 @@ async def get_operator_dashboard_all(acteur_id: str, filter_type: str = "all", d
         gen_q = db.query(
             FicPersonne.genre,
             func.count(FicPersonne.id).label("count")
-        ).join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id)
+        )
         if acteur_filter:
-            gen_q = gen_q.filter(FicPersonneProjet.acteur_id == acteur_filter)
+            gen_q = gen_q.filter(FicPersonne.acteur_id == acteur_filter)
         if is_active:
             gen_q = gen_q.join(
                 Contrat, FicPersonne.id == Contrat.fic_personne_id
@@ -950,17 +904,17 @@ async def get_operator_dashboard_all(acteur_id: str, filter_type: str = "all", d
 
         # ── 12. Embauches mensuelles ────────────────────────────────────────
         start_date = today - timedelta(days=365)
+        month_expr = func.date_trunc('month', Contrat.date_debut)
         hires_q = db.query(
-            func.date_trunc('month', Contrat.date_debut).label('month'),
+            month_expr.label('month'),
             func.count(Contrat.id).label('count')
         ).join(FicPersonne, FicPersonne.id == Contrat.fic_personne_id
-        ).join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
         ).filter(Contrat.date_debut >= start_date)
         if acteur_filter:
-            hires_q = hires_q.filter(FicPersonneProjet.acteur_id == acteur_filter)
+            hires_q = hires_q.filter(FicPersonne.acteur_id == acteur_filter)
         hires_data = hires_q.group_by(
-            func.date_trunc('month', Contrat.date_debut)
-        ).order_by(func.date_trunc('month', Contrat.date_debut)).all()
+            month_expr
+        ).order_by(month_expr).all()
         monthly_hires = [
             {"month": m.strftime("%Y-%m"), "count": c}
             for m, c in hires_data if m
@@ -1018,12 +972,8 @@ async def get_admin_stats(db: Session = Depends(get_db), _: Users = Depends(get_
     try:
         today = date.today()
         total_acteurs = db.query(func.count(Acteur.id)).scalar() or 0
-        total_personnel = db.query(func.count(func.distinct(FicPersonne.id))).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
-        ).scalar() or 0
+        total_personnel = db.query(func.count(func.distinct(FicPersonne.id))).scalar() or 0
         employes_actifs = db.query(func.count(func.distinct(FicPersonne.id))).join(
-            FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id
-        ).join(
             Contrat, FicPersonne.id == Contrat.fic_personne_id
         ).filter(
             Contrat.date_debut <= today,

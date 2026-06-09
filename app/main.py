@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from app.database import init_db
 from app.config import settings
-from app.routes import auth, geographic, acteur, projet, personne, contrat, supervision, localisation, zone_intervention, user_actions, dashboard, import_export, employees, employees_create, zones, engagement, engagement_liaison, dashboard_responsible, admin_tools
+from app.routes import auth, geographic, acteur, projet, personne, contrat, supervision, localisation, zone_intervention, user_actions, dashboard, import_export, employees, employees_create, zones, engagement, engagement_liaison, dashboard_responsible, admin_tools, data_import
 from app.scheduler import start_scheduler, stop_scheduler
 
 
@@ -78,6 +78,7 @@ app.include_router(zones.router)
 app.include_router(engagement.router)
 app.include_router(engagement_liaison.router)
 app.include_router(admin_tools.router)
+app.include_router(data_import.router)
 
 
 @app.get("/health")

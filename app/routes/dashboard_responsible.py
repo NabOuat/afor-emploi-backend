@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from app.database import get_db
 from app.models import (
     FicPersonne, Contrat, FicPersonneLocalisation,
-    FicPersonneProjet, Projet, TRegion, Users
+    Projet, TRegion, Users
 )
 from app.security import get_current_user
 
@@ -19,9 +19,9 @@ def _base_query(db: Session, acteur_id: str, filter_type: str = "tous"):
 
     q = (
         db.query(FicPersonne, Contrat)
-        .join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id)
+        
         .join(Contrat, FicPersonne.id == Contrat.fic_personne_id)
-        .filter(FicPersonneProjet.acteur_id == acteur_id)
+        .filter(FicPersonne.acteur_id == acteur_id)
     )
 
     if filter_type == "actifs":
@@ -123,9 +123,9 @@ async def get_contracts_expiring(acteur_id: str, db: Session = Depends(get_db), 
             return (
                 db.query(func.count(Contrat.id))
                 .join(FicPersonne, Contrat.fic_personne_id == FicPersonne.id)
-                .join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id)
+                
                 .filter(
-                    FicPersonneProjet.acteur_id == acteur_id,
+                    FicPersonne.acteur_id == acteur_id,
                     Contrat.date_debut <= today,
                     Contrat.date_fin > start,
                     Contrat.date_fin <= end,
@@ -158,8 +158,8 @@ async def get_employees_by_region(
             .join(FicPersonneLocalisation, TRegion.id == FicPersonneLocalisation.region_id)
             .join(Contrat, FicPersonneLocalisation.contrat_id == Contrat.id)
             .join(FicPersonne, Contrat.fic_personne_id == FicPersonne.id)
-            .join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id)
-            .filter(FicPersonneProjet.acteur_id == acteur_id)
+            
+            .filter(FicPersonne.acteur_id == acteur_id)
         )
 
         if filter_type == "actifs":
@@ -207,10 +207,10 @@ async def get_evolution_effectifs(
 
             count = (
                 db.query(func.count(FicPersonne.id.distinct()))
-                .join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id)
+                
                 .join(Contrat, FicPersonne.id == Contrat.fic_personne_id)
                 .filter(
-                    FicPersonneProjet.acteur_id == acteur_id,
+                    FicPersonne.acteur_id == acteur_id,
                     Contrat.date_debut <= month_date,
                     or_(Contrat.date_fin >= month_date, Contrat.date_fin.is_(None)),
                 )
@@ -238,12 +238,12 @@ async def get_projects_occupation_rate(
     try:
         today = date.today()
 
+        # Le projet d'un employé est porté par son contrat (contrat.projet_id)
         q = (
             db.query(Projet.nom, func.count(FicPersonne.id.distinct()).label("count"))
-            .join(FicPersonneProjet, Projet.id == FicPersonneProjet.projet_id)
-            .join(FicPersonne, FicPersonneProjet.fic_personne_id == FicPersonne.id)
-            .join(Contrat, FicPersonne.id == Contrat.fic_personne_id)
-            .filter(FicPersonneProjet.acteur_id == acteur_id)
+            .join(Contrat, Projet.id == Contrat.projet_id)
+            .join(FicPersonne, FicPersonne.id == Contrat.fic_personne_id)
+            .filter(FicPersonne.acteur_id == acteur_id)
         )
 
         if filter_type == "actifs":
@@ -449,19 +449,23 @@ async def get_monthly_hires(
         today = date.today()
         start = today - timedelta(days=30 * months)
 
+        # Même expression réutilisée : sous psycopg3 le littéral "month" est un
+        # paramètre bind ; trois appels distincts produisent trois paramètres
+        # que Postgres ne peut pas apparier (GroupingError sur date_debut).
+        month_expr = func.date_trunc("month", Contrat.date_debut)
         hires = (
             db.query(
-                func.date_trunc("month", Contrat.date_debut).label("month"),
+                month_expr.label("month"),
                 func.count(Contrat.id).label("count"),
             )
             .join(FicPersonne, FicPersonne.id == Contrat.fic_personne_id)
-            .join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id)
+            
             .filter(
-                FicPersonneProjet.acteur_id == acteur_id,
+                FicPersonne.acteur_id == acteur_id,
                 Contrat.date_debut >= start,
             )
-            .group_by(func.date_trunc("month", Contrat.date_debut))
-            .order_by(func.date_trunc("month", Contrat.date_debut))
+            .group_by(month_expr)
+            .order_by(month_expr)
             .all()
         )
 
@@ -496,8 +500,8 @@ async def get_geographic_coverage(
             .join(FicPersonneLocalisation, TRegion.id == FicPersonneLocalisation.region_id)
             .join(Contrat, FicPersonneLocalisation.contrat_id == Contrat.id)
             .join(FicPersonne, Contrat.fic_personne_id == FicPersonne.id)
-            .join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id)
-            .filter(FicPersonneProjet.acteur_id == acteur_id)
+            
+            .filter(FicPersonne.acteur_id == acteur_id)
         )
 
         if filter_type == "actifs":
@@ -544,9 +548,9 @@ async def get_top_schools(
         q = (
             db.query(Contrat.ecole, func.count(Contrat.id).label("count"))
             .join(FicPersonne, FicPersonne.id == Contrat.fic_personne_id)
-            .join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id)
+            
             .filter(
-                FicPersonneProjet.acteur_id == acteur_id,
+                FicPersonne.acteur_id == acteur_id,
                 Contrat.ecole.isnot(None),
                 Contrat.ecole != "-",
             )
@@ -585,8 +589,8 @@ async def get_contract_status(acteur_id: str, db: Session = Depends(get_db), _: 
             return (
                 db.query(func.count(Contrat.id))
                 .join(FicPersonne, FicPersonne.id == Contrat.fic_personne_id)
-                .join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id)
-                .filter(FicPersonneProjet.acteur_id == acteur_id, extra_filter)
+                
+                .filter(FicPersonne.acteur_id == acteur_id, extra_filter)
                 .scalar() or 0
             )
 
@@ -595,9 +599,9 @@ async def get_contract_status(acteur_id: str, db: Session = Depends(get_db), _: 
         actifs = (
             db.query(func.count(Contrat.id))
             .join(FicPersonne, FicPersonne.id == Contrat.fic_personne_id)
-            .join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id)
+            
             .filter(
-                FicPersonneProjet.acteur_id == acteur_id,
+                FicPersonne.acteur_id == acteur_id,
                 Contrat.date_debut <= today,
                 or_(Contrat.date_fin >= today, Contrat.date_fin.is_(None)),
             )
@@ -606,9 +610,9 @@ async def get_contract_status(acteur_id: str, db: Session = Depends(get_db), _: 
         expires = (
             db.query(func.count(Contrat.id))
             .join(FicPersonne, FicPersonne.id == Contrat.fic_personne_id)
-            .join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id)
+            
             .filter(
-                FicPersonneProjet.acteur_id == acteur_id,
+                FicPersonne.acteur_id == acteur_id,
                 Contrat.date_fin < today,
             )
             .scalar() or 0
@@ -616,9 +620,9 @@ async def get_contract_status(acteur_id: str, db: Session = Depends(get_db), _: 
         a_venir = (
             db.query(func.count(Contrat.id))
             .join(FicPersonne, FicPersonne.id == Contrat.fic_personne_id)
-            .join(FicPersonneProjet, FicPersonne.id == FicPersonneProjet.fic_personne_id)
+            
             .filter(
-                FicPersonneProjet.acteur_id == acteur_id,
+                FicPersonne.acteur_id == acteur_id,
                 Contrat.date_debut > today,
             )
             .scalar() or 0

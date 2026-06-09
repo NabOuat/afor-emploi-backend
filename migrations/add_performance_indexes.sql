@@ -2,21 +2,19 @@
 -- À exécuter une seule fois sur la base de données cible.
 -- Tous les CREATE INDEX utilisent IF NOT EXISTS — sans risque si déjà présents.
 
--- ── fic_personne_projet ────────────────────────────────────────────────────
--- Colonne la plus filtrée dans l'application (dashboard, employees, responsible)
-CREATE INDEX IF NOT EXISTS idx_fpp_acteur_id
-    ON fic_personne_projet (acteur_id);
-
-CREATE INDEX IF NOT EXISTS idx_fpp_fic_personne_id
-    ON fic_personne_projet (fic_personne_id);
-
-CREATE INDEX IF NOT EXISTS idx_fpp_projet_id
-    ON fic_personne_projet (projet_id);
+-- ── fic_personne ───────────────────────────────────────────────────────────
+-- L'acteur est désormais porté par la personne (colonne très filtrée :
+-- dashboard, employees, responsible). Remplace l'ancien fic_personne_projet.
+CREATE INDEX IF NOT EXISTS idx_fp_acteur_id
+    ON fic_personne (acteur_id);
 
 -- ── contrat ────────────────────────────────────────────────────────────────
--- Filtres fréquents : statut actif (date_debut/date_fin) et jointure sur fic_personne
+-- Filtres fréquents : projet, statut actif (date_debut/date_fin) et jointure sur fic_personne
 CREATE INDEX IF NOT EXISTS idx_contrat_fic_personne_id
     ON contrat (fic_personne_id);
+
+CREATE INDEX IF NOT EXISTS idx_contrat_projet_id
+    ON contrat (projet_id);
 
 CREATE INDEX IF NOT EXISTS idx_contrat_dates
     ON contrat (date_debut, date_fin);

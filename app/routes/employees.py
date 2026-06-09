@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from datetime import date
 from app.database import get_db
-from app.models import FicPersonne, Contrat, FicPersonneLocalisation, FicPersonneProjet, Projet, TRegion, TDepartement, TSousPrefecture, ZoneDIntervention, Users
+from app.models import FicPersonne, Contrat, FicPersonneLocalisation, Projet, TRegion, TDepartement, TSousPrefecture, ZoneDIntervention, Users
 from app.security import get_current_user
 from typing import List, Optional
 import logging
@@ -63,18 +63,16 @@ async def get_employees_list(
         # Compte total d'employés distincts pour cet acteur
         count_result = db.execute(text("""
             SELECT COUNT(DISTINCT fp.id)
-            FROM fic_personne_projet fpp
-            INNER JOIN fic_personne fp ON fpp.fic_personne_id = fp.id
-            WHERE fpp.acteur_id = :acteur_id
+            FROM fic_personne fp
+            WHERE fp.acteur_id = :acteur_id
         """), {"acteur_id": acteur_id})
         total = count_result.scalar() or 0
 
         # IDs de la page courante
         ids_result = db.execute(text("""
             SELECT DISTINCT fp.id
-            FROM fic_personne_projet fpp
-            INNER JOIN fic_personne fp ON fpp.fic_personne_id = fp.id
-            WHERE fpp.acteur_id = :acteur_id
+            FROM fic_personne fp
+            WHERE fp.acteur_id = :acteur_id
             ORDER BY fp.id
             LIMIT :limit OFFSET :offset
         """), {"acteur_id": acteur_id, "limit": page_size, "offset": (page - 1) * page_size})
@@ -108,7 +106,7 @@ async def get_employees_list(
                 tr.nom as region_nom,
                 td.nom as departement_nom,
                 ts.nom as sous_prefecture_nom,
-                fpp.projet_id as fpp_projet_id,
+                c.projet_id as fpp_projet_id,
                 p.id as projet_id,
                 p.nom as projet_nom,
                 p.nom_complet as projet_nom_complet,
@@ -116,16 +114,15 @@ async def get_employees_list(
                 u.username as created_by_username,
                 u.nom as created_by_nom,
                 u.prenom as created_by_prenom
-            FROM fic_personne_projet fpp
-            INNER JOIN fic_personne fp ON fpp.fic_personne_id = fp.id
+            FROM fic_personne fp
             LEFT JOIN contrat c ON fp.id = c.fic_personne_id
             LEFT JOIN fic_personne_localisation fpl ON c.id = fpl.contrat_id
             LEFT JOIN tregion tr ON fpl.region_id = tr.id
             LEFT JOIN tdepartement td ON fpl.departement_id = td.id
             LEFT JOIN tsousprefecture ts ON fpl.sous_prefecture_id = ts.id
-            LEFT JOIN projet p ON fpp.projet_id = p.id
+            LEFT JOIN projet p ON c.projet_id = p.id
             LEFT JOIN users u ON fp.created_by = u.id
-            WHERE fpp.acteur_id = :acteur_id AND fp.id = ANY(:ids)
+            WHERE fp.acteur_id = :acteur_id AND fp.id = ANY(:ids)
             ORDER BY fp.id, c.date_debut DESC
         """), {"acteur_id": acteur_id, "ids": page_ids})
 
@@ -320,29 +317,29 @@ async def get_all_employees_global(
         params = {}
 
         if filter_acteur_id:
-            where_clauses.append("fpp.acteur_id = :filter_acteur_id")
+            where_clauses.append("fp.acteur_id = :filter_acteur_id")
             params["filter_acteur_id"] = filter_acteur_id
 
         if filter_projet_id:
-            where_clauses.append("fpp.projet_id = :filter_projet_id")
+            where_clauses.append("c.projet_id = :filter_projet_id")
             params["filter_projet_id"] = filter_projet_id
 
         where_str = " AND ".join(where_clauses)
 
         count_result = db.execute(text(f"""
             SELECT COUNT(DISTINCT fp.id)
-            FROM fic_personne_projet fpp
-            INNER JOIN fic_personne fp ON fpp.fic_personne_id = fp.id
-            INNER JOIN acteur a ON fpp.acteur_id = a.id
+            FROM fic_personne fp
+            INNER JOIN acteur a ON fp.acteur_id = a.id
+            LEFT JOIN contrat c ON fp.id = c.fic_personne_id
             WHERE {where_str}
         """), params)
         total = count_result.scalar() or 0
 
         ids_result = db.execute(text(f"""
             SELECT DISTINCT fp.id
-            FROM fic_personne_projet fpp
-            INNER JOIN fic_personne fp ON fpp.fic_personne_id = fp.id
-            INNER JOIN acteur a ON fpp.acteur_id = a.id
+            FROM fic_personne fp
+            INNER JOIN acteur a ON fp.acteur_id = a.id
+            LEFT JOIN contrat c ON fp.id = c.fic_personne_id
             WHERE {where_str}
             ORDER BY fp.id
             LIMIT :limit OFFSET :offset
@@ -378,7 +375,7 @@ async def get_all_employees_global(
                 tr.nom as region_nom,
                 td.nom as departement_nom,
                 ts.nom as sous_prefecture_nom,
-                fpp.projet_id as fpp_projet_id,
+                c.projet_id as fpp_projet_id,
                 p.id as projet_id,
                 p.nom as projet_nom,
                 p.nom_complet as projet_nom_complet,
@@ -386,18 +383,17 @@ async def get_all_employees_global(
                 u.username as created_by_username,
                 u.nom as created_by_nom,
                 u.prenom as created_by_prenom,
-                fpp.acteur_id,
+                fp.acteur_id,
                 a.nom as acteur_nom,
                 a.type_acteur
-            FROM fic_personne_projet fpp
-            INNER JOIN fic_personne fp ON fpp.fic_personne_id = fp.id
-            INNER JOIN acteur a ON fpp.acteur_id = a.id
+            FROM fic_personne fp
+            INNER JOIN acteur a ON fp.acteur_id = a.id
             LEFT JOIN contrat c ON fp.id = c.fic_personne_id
             LEFT JOIN fic_personne_localisation fpl ON c.id = fpl.contrat_id
             LEFT JOIN tregion tr ON fpl.region_id = tr.id
             LEFT JOIN tdepartement td ON fpl.departement_id = td.id
             LEFT JOIN tsousprefecture ts ON fpl.sous_prefecture_id = ts.id
-            LEFT JOIN projet p ON fpp.projet_id = p.id
+            LEFT JOIN projet p ON c.projet_id = p.id
             LEFT JOIN users u ON fp.created_by = u.id
             WHERE {where_str} AND fp.id = ANY(:ids)
             ORDER BY fp.id, c.date_debut DESC

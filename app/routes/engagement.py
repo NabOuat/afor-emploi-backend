@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Engagement, ProjetEngagement, Projet, Users
+from app.models import Engagement, ProjetEngagement, Projet, Contrat, Users
 from app.security import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/engagements", tags=["Assignation"])
@@ -95,4 +95,33 @@ async def create_engagement(nom: str, description: str = None, db: Session = Dep
     except Exception as e:
         db.rollback()
         print(f"Erreur lors de la création de l'engagement: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{engagement_id}")
+async def delete_engagement(engagement_id: str, db: Session = Depends(get_db), _: Users = Depends(require_admin)):
+    """
+    Supprime un engagement. Refuse si l'engagement est encore utilisé par des
+    contrats ; les liaisons projet-engagement sont supprimées en cascade.
+    """
+    try:
+        engagement = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+        if not engagement:
+            raise HTTPException(status_code=404, detail="Engagement non trouvé")
+
+        used = db.query(Contrat).filter(Contrat.engagement_id == engagement_id).count()
+        if used:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Engagement utilisé par {used} contrat(s) — suppression impossible",
+            )
+
+        db.delete(engagement)  # cascade sur projet_engagement
+        db.commit()
+        return {"message": "Engagement supprimé avec succès"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

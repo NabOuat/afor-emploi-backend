@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from datetime import date
 from typing import Optional
 from app.database import get_db
-from app.models import FicPersonne, FicPersonneProjet, Projet, Acteur, Contrat, FicPersonneLocalisation, Users
+from app.models import FicPersonne, Projet, Acteur, Contrat, FicPersonneLocalisation, ZoneDIntervention, Users
 from app.security import get_current_user, require_admin
 from app.utils.logger import app_logger, log_employee_creation, log_db_operation, log_error
 import uuid
@@ -78,6 +78,7 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
             genre=request.genre,
             contact=request.contact,
             matricule=request.matricule,
+            acteur_id=acteur_id,  # un employé appartient à un et un seul acteur
             created_by=request.created_by
         )
 
@@ -91,6 +92,12 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
         db.add(new_employee)
         db.flush()
 
+        # Le projet (et l'engagement) sont portés par le contrat.
+        # On prend projet_id explicite, sinon le 1er projet sélectionné.
+        first_sel = request.projets[0] if request.projets else None
+        effective_projet_id = request.projet_id or (first_sel.projet_id if first_sel else None)
+        effective_engagement_id = request.engagement_id or (first_sel.engagement_id if first_sel else None)
+
         # Créer le contrat associé si des informations sont fournies
         contrat_id = None
         effective_poste_nom = request.poste_nom or request.poste
@@ -99,8 +106,8 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
             new_contrat = Contrat(
                 id=contrat_id,
                 fic_personne_id=employee_id,
-                projet_id=request.projet_id,
-                engagement_id=request.engagement_id,
+                projet_id=effective_projet_id,
+                engagement_id=effective_engagement_id,
                 poste_nom=effective_poste_nom,
                 categorie_poste=request.categorie_poste,
                 type_contrat=request.type_contrat,
@@ -157,31 +164,13 @@ async def create_employee(request: CreateEmployeeRequest, acteur_id: str, db: Se
 
             db.add(new_localisation)
 
-        # Ajouter les projets sélectionnés via fic_personne_projet
+        # Le rattachement personne→projet est désormais porté par le contrat
+        # (contrat.projet_id) et l'acteur par fic_personne.acteur_id.
+        # On valide simplement que les projets sélectionnés existent.
         for projet_sel in request.projets:
-            # Vérifier que le projet existe
             projet = db.query(Projet).filter(Projet.id == projet_sel.projet_id).first()
             if not projet:
                 app_logger.warning(f"Projet {projet_sel.projet_id} non trouvé")
-                continue
-
-            # Créer la relation fic_personne_projet
-            relation_id = str(uuid.uuid4())
-            relation = FicPersonneProjet(
-                id=relation_id,
-                fic_personne_id=employee_id,
-                projet_id=projet_sel.projet_id,
-                acteur_id=acteur_id
-            )
-
-            log_db_operation("INSERT", "fic_personne_projet", {
-                "id": relation_id,
-                "fic_personne_id": employee_id,
-                "projet_id": projet_sel.projet_id,
-                "acteur_id": acteur_id
-            })
-
-            db.add(relation)
 
         db.commit()
 
@@ -212,7 +201,6 @@ async def delete_employee(employee_id: str, db: Session = Depends(get_db), _: Us
         db.query(FicPersonneLocalisation).filter(FicPersonneLocalisation.contrat_id == contrat.id).delete()
         db.delete(contrat)
 
-    db.query(FicPersonneProjet).filter(FicPersonneProjet.fic_personne_id == employee_id).delete()
     db.delete(employee)
     db.commit()
 
@@ -222,14 +210,14 @@ async def delete_employee(employee_id: str, db: Session = Depends(get_db), _: Us
 
 @router.get("/projects-create")
 async def get_projects(acteur_id: str, db: Session = Depends(get_db), _: Users = Depends(get_current_user)):
-    """Récupérer la liste des projets disponibles pour un acteur (via fic_personne_projet)"""
+    """Récupérer la liste des projets disponibles pour un acteur (via zone_d_intervention)"""
 
     try:
-        # Récupérer les projets associés à cet acteur
+        # Les projets d'un acteur proviennent de ses zones d'intervention
         projets = db.query(Projet).join(
-            FicPersonneProjet, Projet.id == FicPersonneProjet.projet_id
+            ZoneDIntervention, Projet.id == ZoneDIntervention.projet_id
         ).filter(
-            FicPersonneProjet.acteur_id == acteur_id
+            ZoneDIntervention.acteur_id == acteur_id
         ).distinct().all()
 
         result = []

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Date, Boolean, ForeignKey, Text, DateTime, ARRAY
+from sqlalchemy import Column, String, Date, ForeignKey, Text, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
@@ -63,7 +63,7 @@ class Acteur(Base):
     
     users = relationship("Users", back_populates="acteur", cascade="all, delete-orphan")
     zones_intervention = relationship("ZoneDIntervention", back_populates="acteur", cascade="all, delete-orphan")
-    fic_personne_projets = relationship("FicPersonneProjet", back_populates="acteur", cascade="all, delete-orphan")
+    fic_personnes = relationship("FicPersonne", back_populates="acteur", cascade="all, delete-orphan")
     actions = relationship("UserAction", back_populates="acteur", cascade="all, delete-orphan")
 
 
@@ -110,7 +110,7 @@ class Projet(Base):
     nom_complet = Column(String)
     
     zones_intervention = relationship("ZoneDIntervention", back_populates="projet", cascade="all, delete-orphan")
-    fic_personnes = relationship("FicPersonneProjet", back_populates="projet", cascade="all, delete-orphan")
+    contrats = relationship("Contrat", back_populates="projet")
     engagements = relationship("ProjetEngagement", back_populates="projet", cascade="all, delete-orphan")
 
 
@@ -155,34 +155,31 @@ class ZoneDIntervention(Base):
 # PERSON & CONTRACT MODELS
 # ============================================
 
-class FicPersonneProjet(Base):
-    __tablename__ = "fic_personne_projet"
-    
-    id = Column(String, primary_key=True)
-    fic_personne_id = Column(String, ForeignKey("fic_personne.id", ondelete="CASCADE"), nullable=False)
-    projet_id = Column(String, ForeignKey("projet.id", ondelete="CASCADE"), nullable=False)
-    acteur_id = Column(String, ForeignKey("acteur.id", ondelete="CASCADE"), nullable=False)
-    
-    fic_personne = relationship("FicPersonne", back_populates="projets")
-    projet = relationship("Projet", back_populates="fic_personnes")
-    acteur = relationship("Acteur", back_populates="fic_personne_projets")
-
-
 class FicPersonne(Base):
     __tablename__ = "fic_personne"
-    
+
+    __table_args__ = (
+        # Matricule unique par acteur : deux opérateurs différents peuvent avoir
+        # le même numéro de matricule dans leurs registres respectifs.
+        UniqueConstraint("acteur_id", "matricule", name="uq_fic_personne_acteur_matricule"),
+    )
+
     id = Column(String, primary_key=True)
     nom = Column(String, nullable=False)
     prenom = Column(String, nullable=False)
     date_naissance = Column(Date)
     genre = Column(String)
     contact = Column(String)
-    matricule = Column(String, unique=True)
+    matricule = Column(String)
+    # Un employé appartient à un et un seul acteur (opérateur/école/agence…).
+    # L'acteur est donc porté par la personne, pas par le contrat.
+    acteur_id = Column(String, ForeignKey("acteur.id", ondelete="CASCADE"), nullable=True)
     created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    
-    projets = relationship("FicPersonneProjet", back_populates="fic_personne", cascade="all, delete-orphan")
+
+    acteur = relationship("Acteur", back_populates="fic_personnes")
     supervision = relationship("Supervision", back_populates="fic_personne", uselist=False, cascade="all, delete-orphan")
-    contrat = relationship("Contrat", back_populates="fic_personne", uselist=False, cascade="all, delete-orphan", foreign_keys="Contrat.fic_personne_id")
+    # Une personne peut avoir plusieurs contrats successifs (un seul actif à la fois).
+    contrats = relationship("Contrat", back_populates="fic_personne", cascade="all, delete-orphan", foreign_keys="Contrat.fic_personne_id")
     creator = relationship("Users", foreign_keys=[created_by])
 
 
@@ -215,8 +212,8 @@ class Contrat(Base):
     diplome = Column(String)
     ecole = Column(String)
     
-    fic_personne = relationship("FicPersonne", back_populates="contrat")
-    projet = relationship("Projet")
+    fic_personne = relationship("FicPersonne", back_populates="contrats")
+    projet = relationship("Projet", back_populates="contrats")
     engagement = relationship("Engagement", back_populates="contrats")
     localisations = relationship("FicPersonneLocalisation", back_populates="contrat", cascade="all, delete-orphan")
 

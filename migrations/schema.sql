@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS public."acteur" (
 -- Table: administrateur
 CREATE TABLE IF NOT EXISTS public."administrateur" (
     "id" VARCHAR NOT NULL,
-    "login_id" VARCHAR NOT NULL,
+    "user_id" VARCHAR NOT NULL,
     "nom" VARCHAR NOT NULL,
     "prenom" VARCHAR NOT NULL,
     "email" VARCHAR,
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS public."administrateur" (
     "role" VARCHAR,
     "date_creation" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "administrateur_pkey" PRIMARY KEY (id),
-    CONSTRAINT "administrateur_login_id_key" UNIQUE (login_id)
+    CONSTRAINT "administrateur_user_id_key" UNIQUE (user_id)
 );
 
 -- Table: contrat
@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS public."engagement" (
 );
 
 -- Table: fic_personne
+-- acteur_id : un employé appartient à un et un seul acteur (porté par la personne).
 CREATE TABLE IF NOT EXISTS public."fic_personne" (
     "id" VARCHAR NOT NULL,
     "nom" VARCHAR NOT NULL,
@@ -98,19 +99,9 @@ CREATE TABLE IF NOT EXISTS public."fic_personne" (
     "genre" VARCHAR,
     "contact" VARCHAR,
     "matricule" VARCHAR,
+    "acteur_id" VARCHAR,
     "created_by" VARCHAR,
     CONSTRAINT "fic_personne_pkey" PRIMARY KEY (id)
-);
-
--- Table: fic_personne_acteur
-CREATE TABLE IF NOT EXISTS public."fic_personne_acteur" (
-    "id" UUID NOT NULL,
-    "fic_personne_id" UUID NOT NULL,
-    "acteur_id" UUID NOT NULL,
-    "date_debut" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    "statut" VARCHAR DEFAULT 'ACTIF'::character varying,
-    CONSTRAINT "fic_personne_acteur_pkey" PRIMARY KEY (id),
-    CONSTRAINT "fic_personne_acteur_fic_personne_id_acteur_id_key" UNIQUE (fic_personne_id, acteur_id)
 );
 
 -- Table: fic_personne_localisation
@@ -122,17 +113,6 @@ CREATE TABLE IF NOT EXISTS public."fic_personne_localisation" (
     "sous_prefecture_id" VARCHAR,
     "date_debut" DATE,
     CONSTRAINT "fic_personne_localisation_pkey" PRIMARY KEY (id)
-);
-
--- Table: fic_personne_projet
-CREATE TABLE IF NOT EXISTS public."fic_personne_projet" (
-    "id" VARCHAR NOT NULL,
-    "fic_personne_id" VARCHAR NOT NULL,
-    "projet_id" VARCHAR NOT NULL,
-    "acteur_id" VARCHAR NOT NULL,
-    "date_debut" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    "statut" VARCHAR DEFAULT 'ACTIF'::character varying,
-    CONSTRAINT "fic_personne_projet_pkey" PRIMARY KEY (id)
 );
 
 
@@ -190,7 +170,7 @@ CREATE TABLE IF NOT EXISTS public."tsousprefecture" (
 -- Table: user_actions
 CREATE TABLE IF NOT EXISTS public."user_actions" (
     "id" VARCHAR NOT NULL,
-    "login_id" VARCHAR(255) NOT NULL,
+    "user_id" VARCHAR(255) NOT NULL,
     "username" VARCHAR(255) NOT NULL,
     "acteur_id" VARCHAR(255) NOT NULL,
     "action_type" VARCHAR(100) NOT NULL,
@@ -213,8 +193,8 @@ CREATE TABLE IF NOT EXISTS public."users" (
     "nom" TEXT,
     "prenom" TEXT,
     "email" TEXT,
-    CONSTRAINT "login_pkey" PRIMARY KEY (id),
-    CONSTRAINT "login_username_key" UNIQUE (username)
+    CONSTRAINT "users_pkey" PRIMARY KEY (id),
+    CONSTRAINT "users_username_key" UNIQUE (username)
 );
 
 -- Table: zone_d_intervention
@@ -235,9 +215,19 @@ CREATE TABLE IF NOT EXISTS public."zone_d_intervention" (
 -- ──────────────────────────────────────────────────────────────────────
 
 ALTER TABLE public."administrateur"
-    ADD CONSTRAINT "administrateur_login_id_fkey"
-    FOREIGN KEY (login_id)
+    ADD CONSTRAINT "administrateur_user_id_fkey"
+    FOREIGN KEY (user_id)
     REFERENCES public."users" (id) ON DELETE CASCADE;
+
+ALTER TABLE public."user_actions"
+    ADD CONSTRAINT "user_actions_user_id_fkey"
+    FOREIGN KEY (user_id)
+    REFERENCES public."users" (id) ON DELETE CASCADE;
+
+ALTER TABLE public."user_actions"
+    ADD CONSTRAINT "user_actions_acteur_id_fkey"
+    FOREIGN KEY (acteur_id)
+    REFERENCES public."acteur" (id) ON DELETE CASCADE;
 
 ALTER TABLE public."contrat"
     ADD CONSTRAINT "contrat_engagement_id_fkey"
@@ -259,6 +249,11 @@ ALTER TABLE public."fic_personne"
     FOREIGN KEY (created_by)
     REFERENCES public."users" (id) ON DELETE SET NULL;
 
+ALTER TABLE public."fic_personne"
+    ADD CONSTRAINT "fic_personne_acteur_id_fkey"
+    FOREIGN KEY (acteur_id)
+    REFERENCES public."acteur" (id) ON DELETE CASCADE;
+
 ALTER TABLE public."fic_personne_localisation"
     ADD CONSTRAINT "fic_personne_localisation_contrat_id_fkey"
     FOREIGN KEY (contrat_id)
@@ -278,22 +273,6 @@ ALTER TABLE public."fic_personne_localisation"
     ADD CONSTRAINT "fic_personne_localisation_sous_prefecture_id_fkey"
     FOREIGN KEY (sous_prefecture_id)
     REFERENCES public."tsousprefecture" (id) ON DELETE SET NULL;
-
-ALTER TABLE public."fic_personne_projet"
-    ADD CONSTRAINT "fic_personne_projet_acteur_id_fkey"
-    FOREIGN KEY (acteur_id)
-    REFERENCES public."acteur" (id) ON DELETE CASCADE;
-
-ALTER TABLE public."fic_personne_projet"
-    ADD CONSTRAINT "fic_personne_projet_fic_personne_id_fkey"
-    FOREIGN KEY (fic_personne_id)
-    REFERENCES public."fic_personne" (id) ON DELETE CASCADE;
-
-ALTER TABLE public."fic_personne_projet"
-    ADD CONSTRAINT "fic_personne_projet_projet_id_fkey"
-    FOREIGN KEY (projet_id)
-    REFERENCES public."projet" (id) ON DELETE CASCADE;
-
 
 ALTER TABLE public."projet_engagement"
     ADD CONSTRAINT "projet_engagement_engagement_id_fkey"
@@ -321,7 +300,7 @@ ALTER TABLE public."tsousprefecture"
     REFERENCES public."tdepartement" (id) ON DELETE CASCADE;
 
 ALTER TABLE public."users"
-    ADD CONSTRAINT "login_acteur_id_fkey"
+    ADD CONSTRAINT "users_acteur_id_fkey"
     FOREIGN KEY (acteur_id)
     REFERENCES public."acteur" (id) ON DELETE CASCADE;
 
@@ -356,27 +335,23 @@ ALTER TABLE public."zone_d_intervention"
 -- INDEX
 -- ──────────────────────────────────────────────────────────────────────
 
-CREATE INDEX idx_administrateur_login_id ON public.administrateur USING btree (login_id);
+CREATE INDEX idx_administrateur_user_id ON public.administrateur USING btree (user_id);
 CREATE INDEX idx_contrat_engagement_id ON public.contrat USING btree (engagement_id);
 CREATE INDEX idx_contrat_fic_personne_id ON public.contrat USING btree (fic_personne_id);
 CREATE INDEX idx_contrat_projet_id ON public.contrat USING btree (projet_id);
 CREATE INDEX idx_fic_personne_created_by ON public.fic_personne USING btree (created_by);
-CREATE INDEX idx_fic_personne_acteur_acteur_id ON public.fic_personne_acteur USING btree (acteur_id);
-CREATE INDEX idx_fic_personne_acteur_fic_personne_id ON public.fic_personne_acteur USING btree (fic_personne_id);
+CREATE INDEX idx_fic_personne_acteur_id ON public.fic_personne USING btree (acteur_id);
 CREATE INDEX idx_fic_personne_localisation_contrat_id ON public.fic_personne_localisation USING btree (contrat_id);
-CREATE INDEX idx_fic_personne_projet_acteur_id ON public.fic_personne_projet USING btree (acteur_id);
-CREATE INDEX idx_fic_personne_projet_fic_personne_id ON public.fic_personne_projet USING btree (fic_personne_id);
-CREATE INDEX idx_fic_personne_projet_projet_id ON public.fic_personne_projet USING btree (projet_id);
 CREATE INDEX idx_projet_engagement_engagement_id ON public.projet_engagement USING btree (engagement_id);
 CREATE INDEX idx_projet_engagement_projet_id ON public.projet_engagement USING btree (projet_id);
 CREATE INDEX idx_supervision_fic_personne_id ON public.supervision USING btree (fic_personne_id);
 CREATE INDEX idx_tdepartement_region_id ON public.tdepartement USING btree (region_id);
 CREATE INDEX idx_tsousprefecture_departement_id ON public.tsousprefecture USING btree (departement_id);
 CREATE INDEX idx_user_actions_acteur_id ON public.user_actions USING btree (acteur_id);
-CREATE INDEX idx_user_actions_login_id ON public.user_actions USING btree (login_id);
+CREATE INDEX idx_user_actions_user_id ON public.user_actions USING btree (user_id);
 CREATE INDEX idx_user_actions_resource_id ON public.user_actions USING btree (resource_id);
 CREATE INDEX idx_user_actions_username ON public.user_actions USING btree (username);
-CREATE INDEX idx_login_acteur_id ON public.users USING btree (acteur_id);
+CREATE INDEX idx_users_acteur_id ON public.users USING btree (acteur_id);
 CREATE INDEX idx_zone_intervention_acteur_id ON public.zone_d_intervention USING btree (acteur_id);
 CREATE INDEX idx_zone_intervention_projet_id ON public.zone_d_intervention USING btree (projet_id);
 

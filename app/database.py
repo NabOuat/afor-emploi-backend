@@ -32,7 +32,10 @@ engine = create_engine(settings.DATABASE_URL, **_engine_kwargs)
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_conn, connection_record):
     if "postgresql" in settings.DATABASE_URL:
-        dbapi_conn.set_client_encoding('UTF8')
+        try:
+            dbapi_conn.set_client_encoding('UTF8')
+        except Exception as e:
+            logger.warning(f"Could not set UTF8 encoding: {e}")
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -84,8 +87,16 @@ def _run_schema_sql() -> None:
 
 
 def init_db() -> None:
-    # 1. SQLAlchemy crée les tables définies dans models.py
-    Base.metadata.create_all(bind=engine)
-    # 2. Le schéma SQL complet comble les tables/colonnes absentes des modèles
-    if not _is_sqlite:
-        _run_schema_sql()
+    try:
+        # 1. SQLAlchemy crée les tables définies dans models.py
+        Base.metadata.create_all(bind=engine)
+        # 2. Le schéma SQL complet comble les tables/colonnes absentes des modèles
+        if not _is_sqlite:
+            _run_schema_sql()
+    except UnicodeDecodeError as e:
+        logger.error(f"UnicodeDecodeError during DB init (likely PostgreSQL error message encoding issue): {e}")
+        logger.error(f"DATABASE_URL: {settings.DATABASE_URL[:50]}...")
+        raise
+    except Exception as e:
+        logger.error(f"Error during database initialization: {type(e).__name__}: {e}")
+        raise

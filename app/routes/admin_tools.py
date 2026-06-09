@@ -371,8 +371,8 @@ def check_missing_tables(
     """Vérifie quelles tables du schéma attendu sont absentes de la BD."""
     expected = [
         "acteur", "administrateur", "contrat", "engagement",
-        "fic_personne", "fic_personne_acteur", "fic_personne_localisation",
-        "fic_personne_projet", "projet", "projet_engagement",
+        "fic_personne", "fic_personne_localisation",
+        "projet", "projet_engagement",
         "supervision", "tdepartement", "tregion", "tsousprefecture",
         "user_actions", "users", "zone_d_intervention",
     ]
